@@ -35,6 +35,21 @@ class Game:
     def GetPlayers(self, players):
         self.players = players
     
+    def ChangePlayerPictureWithAngle(self, image):
+        if 0 <= self.players.angle <= 90:  # turning right on the ground
+            image = pygame.transform.rotate(image, self.angle)
+            return pygame.transform.flip(image, False, False)
+        elif 90 <= self.players.angle <= 180:  # turning left on the ground
+            image = pygame.transform.rotate(image, 180 - self.angle)
+            return pygame.transform.flip(image, True, False)
+        elif 180 <= self.players.angle <= 270:  # turning left on the ceiling
+            image = pygame.transform.rotate(image, self.angle - 180)
+            return pygame.transform.flip(image, True, True)
+        elif 270 <= self.players.angle <= 360:  # turning right on the ceiling
+            image = pygame.transform.rotate(image, 180 - self.angle)
+            return pygame.transform.flip(image, True, False)
+
+
     def MainLoop(self):
         running = True
         while running:
@@ -58,6 +73,10 @@ class Game:
                                                                        int(self.players.player_rect.height * zoom_level)))
             zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2, self.height // 2))
 
+            self.ChangePlayerPictureWithAngle(zoomed_player_image)
+
+            zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
+
             # Draw everything
             self.screen.blit(self.background_image, (bg_x, bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
@@ -71,7 +90,13 @@ class Game:
 
 class Player(Game):
     
-    GRAVITY_FORCE = 9.81
+    FLOOR_HEIGHT = 850
+    CEILING_HEIGHT = 100
+    RIGHT_WALL = 2150
+    LEFT_WALL = 300
+    DISTANCE_FROM__WALL = 110
+
+    GRAVITY_FORCE = 10
 
     def __init__(self, speed):
         super().__init__(1500, 800)
@@ -81,6 +106,7 @@ class Player(Game):
         self.motion = [0, 0]
         self.speed = speed
         self.inJump = False
+        self.angle = 0
         
         self.SetPlayers()
     
@@ -91,6 +117,49 @@ class Player(Game):
         self.player_rect = self.player_image.get_rect()
         self.player_rect.x = 500
         self.player_rect.y = 850
+
+    
+    def __Function(self, x):
+        return (x**2) / 80
+
+    def __DerivativeFunction(self, x):
+        return 2*x / 80
+
+    # the sides of the map require the player to change its angle
+    def __GetPlayerAngleOnSides(self, xDiff):
+        # we will get the angle of the player with incline of the function
+        incline = self.__DerivativeFunction(xDiff)
+        angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
+        angle = int(angle)
+        if angle < 0:
+            angle = abs(angle)
+            angle += 180 + (180 - angle)
+
+        return angle
+
+
+    def ChangePlayerHeightOnSides(self):
+        
+        # we will check on which side the player is and the build the right equation according to the side
+        xDiffRight = self.RIGHT_WALL - self.player_rect.x
+        xDiffLeft = self.player_rect.x - self.LEFT_WALL
+        if xDiffRight < self.DISTANCE_FROM__WALL:  # right wall
+            xDiff = abs(xDiffRight - self.DISTANCE_FROM__WALL)
+            if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff): # right bottom ramp
+                self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
+                self.angle = self.__GetPlayerAngleOnSides(xDiff)
+            elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # right upper ramp
+                self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
+                self.angle = 360 - self.__GetPlayerAngleOnSides(xDiff)
+        elif xDiffLeft < self.DISTANCE_FROM__WALL:  # left wall
+            xDiff = abs(xDiffLeft - self.DISTANCE_FROM__WALL)
+            if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff):  # left bottom  ramp
+                self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
+                self.angle = 180 - self.__GetPlayerAngleOnSides(xDiff)
+            elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # left upper ramp
+                self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
+                self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
+
     
     def PlayerJump(self):
         # we will use one physics equation
@@ -109,18 +178,37 @@ class Player(Game):
             self.Fy = (-(self.player_rect.y - self.yBefore) / timeDiff)*1.3
             self.Fx = ((self.player_rect.x - self.xBefore) / timeDiff)*1.3
 
-            if self.Fy == 0 and self.Fx == 0:
-                self.inJump = False
-                return
+            if self.angle != 0:
+                vectorSpeed = math.sqrt(self.Fy**2 + self.Fx**2)
+                angle = self.angle
+                if 360 >= angle >= 180:
+                    angle = -(angle % 180)
+                self.Fy = vectorSpeed * math.sin(math.radians(self.angle))
+                self.Fx = vectorSpeed * math.cos(math.radians(self.angle))
 
-        timeDiff = (time.time() - self.time) * self.speed
-        if self.Fy != 0:
-            self.player_rect.y = self.yBefore - self.Fy * timeDiff + (self.GRAVITY_FORCE / 2) * timeDiff ** 2
-        if self.Fx != 0:
-            self.player_rect.x = self.xBefore + self.Fx * timeDiff
-
+            if self.Fy == 0:
+                self.Fy = 100
+        
+        timeDiff = (time.time() - self.time) * self.speed + 0.01 # if timeDiff is zero it won't count it so we will add a little bit
+        self.player_rect.y = self.yBefore - self.Fy * timeDiff + (self.GRAVITY_FORCE*2) * timeDiff ** 2
+        self.player_rect.x = self.xBefore + self.Fx * timeDiff
+        
+        self.CheckBoundariesDurringJump()  # check boundaries
         
     
+    def CheckBoundariesDurringJump(self):
+        if self.player_rect.y <= self.CEILING_HEIGHT:
+            self.player_rect.y = self.CEILING_HEIGHT
+            self.inJump = False
+        if self.player_rect.y >= self.FLOOR_HEIGHT:
+            self.player_rect.y = self.FLOOR_HEIGHT
+            self.inJump = False
+        if self.player_rect.x <= self.LEFT_WALL:
+            self.player_rect.x = self.LEFT_WALL
+            self.inJump = False
+        if self.player_rect.x >= self.RIGHT_WALL:
+            self.player_rect.x = self.RIGHT_WALL
+            self.inJump = False
     
     def ControllerMovement(self, event):
         if event.type == JOYAXISMOTION:  # axis motion
@@ -135,7 +223,7 @@ class Player(Game):
         if event.type == JOYBUTTONDOWN:  # if button was pressed
             if event.button == 1:  # if O button was pressed
                 self.speed *= 2
-            elif event.button == 0:
+            elif event.button == 0 and not self.inJump:  #if player pressed jump and already in jump
                 self.time = time.time()
                 self.PlayerJump()
                 
@@ -144,7 +232,7 @@ class Player(Game):
                 self.speed /= 2
         
         if event.type == pygame.KEYUP:  # the only way to check if the keyboard was released is in event type
-            if event.key == pygame.K_SPACE:
+            if event.key == pygame.K_RCTRL:
                 self.speed /= 2
                 
         
@@ -155,37 +243,47 @@ class Player(Game):
     
     def KeyboardMotion(self):
         keys = pygame.key.get_pressed()
-        if keys[pygame.K_SPACE] and self.speed < 20:
+        if keys[pygame.K_RCTRL] and self.speed < 20:
             self.speed *= 2
-        if keys[pygame.K_LEFT] and self.player_rect.x > 300:
+        if keys[pygame.K_LEFT] and self.player_rect.x > self.LEFT_WALL:
             self.player_rect.x -= self.speed
-        if keys[pygame.K_RIGHT] and self.player_rect.x < 2100:
+        if keys[pygame.K_RIGHT] and self.player_rect.x < self.RIGHT_WALL:
             self.player_rect.x += self.speed
-        if keys[pygame.K_UP] and self.player_rect.y > 100:
+        if keys[pygame.K_UP] and self.player_rect.y > self.CEILING_HEIGHT:
             self.player_rect.y -= self.speed
-        if keys[pygame.K_DOWN] and self.player_rect.y < 850:
+        if keys[pygame.K_DOWN] and self.player_rect.y < self.FLOOR_HEIGHT:
             self.player_rect.y += self.speed
+        if keys[pygame.K_SPACE] and not self.inJump:
+            self.time = time.time()
+            self.PlayerJump()
     
     def PlayerMotion(self):
-        if not self.inJump:
+        if not self.inJump:  # if not in jump motion we need to get the x and y
+                             # in case we will jump we need to know the difference between the last place and current place so we will know the speed
             self.xBefore = self.player_rect.x
             self.yBefore = self.player_rect.y
 
         self.KeyboardMotion()
         
-        if self.player_rect.y >= 850 and self.inJump:
-            self.inJump = False
-            self.player_rect.y = 850
-        elif self.inJump:
+        if self.inJump:
             self.PlayerJump()
         
-        if not self.inJump:
+        else:
             self.player_rect.x += self.motion[0] * self.speed
-            if self.player_rect.x > 2100 or self.player_rect.x < 300:
+            if self.player_rect.x > self.RIGHT_WALL or self.player_rect.x < self.LEFT_WALL:
                 self.player_rect.x -= self.motion[0] * self.speed
             self.player_rect.y += self.motion[1] * 2
-            if self.player_rect.y > 850 or self.player_rect.y < 100:
+            if self.player_rect.y > self.FLOOR_HEIGHT or self.player_rect.y < self.CEILING_HEIGHT:
                 self.player_rect.y -= self.motion[1] * 2
+        
+        """if self.xBefore < self.player_rect.x and 270 > self.angle > 90:  # if turned right from left
+            self.angle -= 180
+        elif self.xBefore > self.player_rect.x and (self.angle < 90 or self.angle > 270):  # if turned left from right
+            self.angle += 180"""
+
+
+        self.ChangePlayerHeightOnSides()
+        print(self.angle)
             
         
 
