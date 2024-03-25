@@ -36,18 +36,28 @@ class Game:
         self.players = players
     
     def ChangePlayerPictureWithAngle(self, image):
-        if 0 <= self.players.angle <= 90:  # turning right on the ground
-            image = pygame.transform.rotate(image, self.angle)
-            return pygame.transform.flip(image, False, False)
-        elif 90 <= self.players.angle <= 180:  # turning left on the ground
-            image = pygame.transform.rotate(image, 180 - self.angle)
-            return pygame.transform.flip(image, True, False)
-        elif 180 <= self.players.angle <= 270:  # turning left on the ceiling
-            image = pygame.transform.rotate(image, self.angle - 180)
-            return pygame.transform.flip(image, True, True)
-        elif 270 <= self.players.angle <= 360:  # turning right on the ceiling
-            image = pygame.transform.rotate(image, 180 - self.angle)
-            return pygame.transform.flip(image, True, False)
+        angle = self.players.angle
+        turningRight = self.players.PlayerGoingRight
+        newAngle = 0
+        flipY = False
+        flipX = False
+        if not turningRight:  # if the player going left
+            # the angle needs to be changed so pygame will draw it correctly
+            flipX = True
+            if 270 >= angle > 180:  #רביע שלישי 
+                flipY = True
+                newAngle =  -180%angle
+            else: #רביע שני
+                newAngle = 180-angle
+        else: # if the player going right
+            if 360 >= angle >= 270: # רביע רביעי
+                newAngle =  -180%angle
+            else: # if the player in רביע ראשון then nothing needs to be changed
+                newAngle = angle
+        
+        image = pygame.transform.rotate(image, newAngle)
+        return pygame.transform.flip(image, flipX, flipY) 
+            
 
 
     def MainLoop(self):
@@ -107,11 +117,13 @@ class Player(Game):
         self.speed = speed
         self.inJump = False
         self.angle = 0
+
+        self.PlayerGoingRight = True
         
         self.SetPlayers()
     
     def SetPlayers(self):
-        self.player_image = pygame.transform.scale(pygame.image.load("player.png"), (70,35))
+        self.player_image = pygame.transform.scale(pygame.image.load("player.png"), (50,25))
         self.player_image.set_colorkey((0,0,0))
         self.player_image.convert_alpha()
         self.player_rect = self.player_image.get_rect()
@@ -120,10 +132,10 @@ class Player(Game):
 
     
     def __Function(self, x):
-        return (x**2) / 80
+        return (x**2) / 100
 
     def __DerivativeFunction(self, x):
-        return 2*x / 80
+        return 2*x / 100
 
     # the sides of the map require the player to change its angle
     def __GetPlayerAngleOnSides(self, xDiff):
@@ -159,6 +171,15 @@ class Player(Game):
             elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # left upper ramp
                 self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
                 self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
+        
+        
+        rawAnglePositive = self.angle - (self.angle//90)*90
+        if rawAnglePositive != 0 and 90 - rawAnglePositive < 20:
+            self.angle += 90 % rawAnglePositive
+        elif rawAnglePositive != 0 and rawAnglePositive < 20:
+            self.angle -= 90 % rawAnglePositive
+        
+        self.CheckBoundariesDurringJump()
 
     
     def PlayerJump(self):
@@ -175,19 +196,20 @@ class Player(Game):
 
             if timeDiff == 0:
                 timeDiff = 0.1
-            self.Fy = (-(self.player_rect.y - self.yBefore) / timeDiff)*1.3
-            self.Fx = ((self.player_rect.x - self.xBefore) / timeDiff)*1.3
-
-            if self.angle != 0:
-                vectorSpeed = math.sqrt(self.Fy**2 + self.Fx**2)
-                angle = self.angle
-                if 360 >= angle >= 180:
-                    angle = -(angle % 180)
-                self.Fy = vectorSpeed * math.sin(math.radians(self.angle))
-                self.Fx = vectorSpeed * math.cos(math.radians(self.angle))
-
-            if self.Fy == 0:
-                self.Fy = 100
+            yPower = (-(self.player_rect.y - self.yBefore) / timeDiff)+75
+            xPower = ((self.player_rect.x - self.xBefore) / timeDiff)
+            
+            vectorSpeed = math.sqrt(yPower**2 + xPower**2)
+            xVectorSpeed = vectorSpeed
+            angle = self.angle
+            if 180 >= angle > 90 or 360 >= angle > 270:
+                angle -= 90
+            else:
+                angle += 90
+            
+            
+            self.Fy = vectorSpeed * math.sin(math.radians(angle))
+            self.Fx = xVectorSpeed * math.cos(math.radians(angle)) +xPower
         
         timeDiff = (time.time() - self.time) * self.speed + 0.01 # if timeDiff is zero it won't count it so we will add a little bit
         self.player_rect.y = self.yBefore - self.Fy * timeDiff + (self.GRAVITY_FORCE*2) * timeDiff ** 2
@@ -257,6 +279,20 @@ class Player(Game):
             self.time = time.time()
             self.PlayerJump()
     
+    def ControllerMovmentHandling(self):
+        self.player_rect.x += self.motion[0] * self.speed
+        if self.player_rect.x > self.RIGHT_WALL or self.player_rect.x < self.LEFT_WALL:
+            self.player_rect.x -= self.motion[0] * self.speed
+        self.player_rect.y += self.motion[1] * 2
+        if self.player_rect.y > self.FLOOR_HEIGHT or self.player_rect.y < self.CEILING_HEIGHT:
+            self.player_rect.y -= self.motion[1] * 2
+    
+    def ChangAngleInTurn(self):
+        if self.angle > 180:
+            self.angle = 360 - self.angle % 180
+        else:
+            self.angle = 180 - self.angle
+
     def PlayerMotion(self):
         if not self.inJump:  # if not in jump motion we need to get the x and y
                              # in case we will jump we need to know the difference between the last place and current place so we will know the speed
@@ -269,19 +305,18 @@ class Player(Game):
             self.PlayerJump()
         
         else:
-            self.player_rect.x += self.motion[0] * self.speed
-            if self.player_rect.x > self.RIGHT_WALL or self.player_rect.x < self.LEFT_WALL:
-                self.player_rect.x -= self.motion[0] * self.speed
-            self.player_rect.y += self.motion[1] * 2
-            if self.player_rect.y > self.FLOOR_HEIGHT or self.player_rect.y < self.CEILING_HEIGHT:
-                self.player_rect.y -= self.motion[1] * 2
+            self.ControllerMovmentHandling()
         
-        """if self.xBefore < self.player_rect.x and 270 > self.angle > 90:  # if turned right from left
-            self.angle -= 180
-        elif self.xBefore > self.player_rect.x and (self.angle < 90 or self.angle > 270):  # if turned left from right
-            self.angle += 180"""
+        if self.xBefore < self.player_rect.x and not self.PlayerGoingRight:  # if turned right from left
+            self.PlayerGoingRight = True
 
+            self.ChangAngleInTurn()
 
+        elif self.xBefore > self.player_rect.x and self.PlayerGoingRight:  # if turned left from right
+            self.PlayerGoingRight = False
+            
+            self.ChangAngleInTurn()
+            
         self.ChangePlayerHeightOnSides()
         print(self.angle)
             
