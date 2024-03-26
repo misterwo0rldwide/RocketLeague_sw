@@ -48,10 +48,16 @@ class Game:
                 flipY = True
                 newAngle =  -180%angle
             else: #רביע שני
+                if self.players.player_rect.y == self.players.CEILING_HEIGHT or self.players.jumpedFromCeiling:
+                    flipY = True
                 newAngle = 180-angle
         else: # if the player going right
             if 360 >= angle >= 270: # רביע רביעי
-                newAngle =  -180%angle
+                flipY = True
+                if angle == 360: 
+                    newAngle = 0
+                else:
+                    newAngle = 90-angle%90
             else: # if the player in רביע ראשון then nothing needs to be changed
                 newAngle = angle
         
@@ -119,6 +125,7 @@ class Player(Game):
         self.angle = 0
 
         self.PlayerGoingRight = True
+        self.onWall = False
         
         self.SetPlayers()
     
@@ -149,8 +156,17 @@ class Player(Game):
 
         return angle
 
+    def MatchAngleOfplayerToWall(self):  # checks if the player is on the wall, if so correct its angle
+        if self.CheckIfOnWall():
+            if 180 >= self.angle >= 0:
+                self.angle = 90
+            else:
+                self.angle = 270
+        else:
+            return False
 
-    def ChangePlayerHeightOnSides(self):
+
+    def ChangePlayerHeightOnRamps(self):
         
         # we will check on which side the player is and the build the right equation according to the side
         xDiffRight = self.RIGHT_WALL - self.player_rect.x
@@ -171,14 +187,7 @@ class Player(Game):
             elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # left upper ramp
                 self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
                 self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
-        
-        
-        rawAnglePositive = self.angle - (self.angle//90)*90
-        if rawAnglePositive != 0 and 90 - rawAnglePositive < 20:
-            self.angle += 90 % rawAnglePositive
-        elif rawAnglePositive != 0 and rawAnglePositive < 20:
-            self.angle -= 90 % rawAnglePositive
-        
+ 
         self.CheckBoundariesDurringJump()
 
     
@@ -191,6 +200,8 @@ class Player(Game):
         
 
         if not self.inJump:  # if first time in this function (right after the player pressed jump)
+            if self.player_rect.y == self.CEILING_HEIGHT:
+                self.jumpedFromCeiling = True
             self.inJump = True
             timeDiff = time.time() - self.time
 
@@ -202,11 +213,24 @@ class Player(Game):
             vectorSpeed = math.sqrt(yPower**2 + xPower**2)
             xVectorSpeed = vectorSpeed
             angle = self.angle
-            if 180 >= angle > 90 or 360 >= angle > 270:
-                angle -= 90
+
+            if angle == 90:  # those angles can show twice - or right or left
+                if not self.PlayerGoingRight:
+                    angle -= 90
+                else:
+                    angle += 90
+            elif angle == 270:
+                if not self.PlayerGoingRight:
+                    angle += 90
+                else:
+                    angle -= 90
+            elif 180 >= angle > 90 or 360 >= angle > 270:
+                if self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT:  # because the player is upside down and the angle is intended to be upright
+                    angle += 90
+                else:
+                    angle -= 90
             else:
                 angle += 90
-            
             
             self.Fy = vectorSpeed * math.sin(math.radians(angle))
             self.Fx = xVectorSpeed * math.cos(math.radians(angle)) +xPower
@@ -222,15 +246,24 @@ class Player(Game):
         if self.player_rect.y <= self.CEILING_HEIGHT:
             self.player_rect.y = self.CEILING_HEIGHT
             self.inJump = False
+            self.jumpedFromCeiling = False
         if self.player_rect.y >= self.FLOOR_HEIGHT:
             self.player_rect.y = self.FLOOR_HEIGHT
             self.inJump = False
+            self.jumpedFromCeiling = False
         if self.player_rect.x <= self.LEFT_WALL:
             self.player_rect.x = self.LEFT_WALL
             self.inJump = False
+            self.jumpedFromCeiling = False
         if self.player_rect.x >= self.RIGHT_WALL:
             self.player_rect.x = self.RIGHT_WALL
             self.inJump = False
+            self.jumpedFromCeiling = False
+    
+    def CheckIfOnWall(self):  # checks if the player is on one if the walls
+        if self.player_rect.x == self.LEFT_WALL or self.player_rect.x == self.RIGHT_WALL:
+            self.onWall = True
+        return self.onWall
     
     def ControllerMovement(self, event):
         if event.type == JOYAXISMOTION:  # axis motion
@@ -288,10 +321,25 @@ class Player(Game):
             self.player_rect.y -= self.motion[1] * 2
     
     def ChangAngleInTurn(self):
-        if self.angle > 180:
-            self.angle = 360 - self.angle % 180
+        if 360 >= self.angle >= 270:
+            self.angle = 180 + 360 - self.angle
+        elif 270 > self.angle > 180:
+            self.angle = 360 - self.angle % 90
         else:
             self.angle = 180 - self.angle
+
+    def CorrectAngleOnGround(self):
+
+        if self.player_rect.y == self.CEILING_HEIGHT:
+            if self.PlayerGoingRight:
+                self.angle = 360
+            else:
+                self.angle = 180
+        elif self.player_rect.y == self.FLOOR_HEIGHT:
+            if self.PlayerGoingRight:
+                self.angle = 0
+            else:
+                self.angle = 180
 
     def PlayerMotion(self):
         if not self.inJump:  # if not in jump motion we need to get the x and y
@@ -299,25 +347,34 @@ class Player(Game):
             self.xBefore = self.player_rect.x
             self.yBefore = self.player_rect.y
 
-        self.KeyboardMotion()
         
         if self.inJump:
             self.PlayerJump()
-        
         else:
+            self.CorrectAngleOnGround()
             self.ControllerMovmentHandling()
+            self.KeyboardMotion()
         
-        if self.xBefore < self.player_rect.x and not self.PlayerGoingRight:  # if turned right from left
+        self.ChangePlayerHeightOnRamps()
+        self.MatchAngleOfplayerToWall()
+            
+
+        if self.xBefore < self.player_rect.x and not self.PlayerGoingRight and not self.inJump:  # if turned right from left
             self.PlayerGoingRight = True
 
-            self.ChangAngleInTurn()
+            if not self.onWall:
+                self.ChangAngleInTurn()
+            else:
+                self.onWall = False
 
-        elif self.xBefore > self.player_rect.x and self.PlayerGoingRight:  # if turned left from right
+        elif self.xBefore > self.player_rect.x and self.PlayerGoingRight and not self.inJump:  # if turned left from right
             self.PlayerGoingRight = False
             
-            self.ChangAngleInTurn()
+            if not self.onWall:
+                self.ChangAngleInTurn()
+            else:
+                self.onWall = False
             
-        self.ChangePlayerHeightOnSides()
         print(self.angle)
             
         
