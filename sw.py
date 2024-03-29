@@ -38,15 +38,24 @@ class Game:
     def ChangePlayerPictureWithAngle(self, image):
         angle = self.players.angle
         turningRight = self.players.PlayerGoingRight
+        x = self.players.player_rect.x
+        y = self.players.player_rect.y
         newAngle = 0
         flipY = False
         flipX = False
         if not turningRight:  # if the player going left
             # the angle needs to be changed so pygame will draw it correctly
             flipX = True
-            if 270 >= angle > 180:  #רביע שלישי 
-                flipY = True
-                newAngle =  -180%angle
+            if 270 >= angle > 180:  #רביע שלישי s
+                if angle == 270:
+                    flipX = False
+                    newAngle = 270
+                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:
+                    flipY = False
+                    newAngle = -(angle % 90)
+                else:
+                    flipY = True
+                    newAngle = angle % 90
             else: #רביע שני
                 if self.players.player_rect.y == self.players.CEILING_HEIGHT or self.players.jumpedFromCeiling:
                     flipY = True
@@ -65,6 +74,43 @@ class Game:
         return pygame.transform.flip(image, flipX, flipY) 
             
 
+    def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
+
+        bg_x = self.width // 2 - self.players.player_rect.centerx
+        bg_y = self.height // 2 - self.players.player_rect.centery
+
+        if bg_x >= 0:  # if the player is right to the left barrier, bg_x will be minus
+            bg_x = 0  # dont let it go over the limit
+        elif bg_x <= -995:  # right wall
+            bg_x = -995 
+        if bg_y >= 0:  # ceiling height
+            bg_y = 0
+        elif bg_y <= -260:  # floor height
+            bg_y = -260
+        
+        return bg_x, bg_y
+    
+    def CorrectPlayerPlace(self, bg_x, bg_y):  # when the map is on the sides we need to fix the player place so it will be in the right place
+        xDiff = 0
+        yDiff = 0
+        if bg_x == 0:
+            xDiff = -((bg_x - self.players.player_rect.x) % 725)  # - because we add the xdiff
+        elif bg_x == -995:
+            xDiff = self.players.player_rect.x - 1725
+        if bg_y == -260:
+            yDiff = 200 - abs(self.players.player_rect.y - 850)  # the floor is 850 so if the player is on the floor 
+        elif bg_y == 0:
+            yDiff = self.players.player_rect.y - 388
+
+        return xDiff,yDiff
+    
+    def ZoomOnPlayerImage(self):  # returned the player image after zooming on it
+        zoom_level = 1.5  # Change this value to adjust zoom level
+        zoomed_player_image = pygame.transform.scale(self.players.player_image, (int(self.players.player_rect.width * zoom_level),
+                                                                    int(self.players.player_rect.height * zoom_level)))
+        
+        return zoomed_player_image
+
 
     def MainLoop(self):
         running = True
@@ -79,23 +125,18 @@ class Game:
             
             #for player in self.players:
             self.players.PlayerMotion()
-            # Update background position based on player movement
-            bg_x = self.width // 2 - self.players.player_rect.centerx
-            bg_y = self.height // 2 - self.players.player_rect.centery
 
-            # Zoom in on the player
-            zoom_level = 1.5  # Change this value to adjust zoom level
-            zoomed_player_image = pygame.transform.scale(self.players.player_image, (int(self.players.player_rect.width * zoom_level),
-                                                                       int(self.players.player_rect.height * zoom_level)))
-            zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2, self.height // 2))
-
-            self.ChangePlayerPictureWithAngle(zoomed_player_image)
-
+            bg_x, bg_y = self.CorrectCameraView()  # get the camera right place
+            zoomed_player_image = self.ZoomOnPlayerImage()
             zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
+            
+            xDiff, yDiff = self.CorrectPlayerPlace(bg_x, bg_y)  #  move the player to be on the right place on screen
+            zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
 
             # Draw everything
             self.screen.blit(self.background_image, (bg_x, bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
+
 
             # Update the display
             pygame.display.update()
@@ -105,7 +146,10 @@ class Game:
 
 
 class Player(Game):
-    
+    WIDTH_SCREEN_VIEW = 1500
+    HEIGHT_SCREEN_VIEW = 800
+
+
     FLOOR_HEIGHT = 850
     CEILING_HEIGHT = 100
     RIGHT_WALL = 2150
@@ -115,7 +159,7 @@ class Player(Game):
     GRAVITY_FORCE = 10
 
     def __init__(self, speed):
-        super().__init__(1500, 800)
+        super().__init__(self.WIDTH_SCREEN_VIEW, self.HEIGHT_SCREEN_VIEW)
     
         pygame.joystick.init()
         self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
@@ -159,9 +203,15 @@ class Player(Game):
     def MatchAngleOfplayerToWall(self):  # checks if the player is on the wall, if so correct its angle
         if self.CheckIfOnWall():
             if 180 >= self.angle >= 0:
-                self.angle = 90
+                if self.yBefore < self.player_rect.y:  # if player going down
+                    self.angle = 270
+                else:
+                    self.angle = 90
             else:
-                self.angle = 270
+                if self.yBefore > self.player_rect.y:  # if player going up
+                    self.angle = 90
+                else:
+                    self.angle = 270
         else:
             return False
 
@@ -174,8 +224,15 @@ class Player(Game):
         if xDiffRight < self.DISTANCE_FROM__WALL:  # right wall
             xDiff = abs(xDiffRight - self.DISTANCE_FROM__WALL)
             if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff): # right bottom ramp
+                if 270 >= self.angle >= 180:
+                    self.PlayerGoingRight = False
+                    xDiff -= 2 + self.speed * 0.5
+                    self.player_rect.x -= 2 + self.speed * 0.5
                 self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
+                
                 self.angle = self.__GetPlayerAngleOnSides(xDiff)
+                if not self.PlayerGoingRight:
+                    self.angle += 180
             elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # right upper ramp
                 self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
                 self.angle = 360 - self.__GetPlayerAngleOnSides(xDiff)
@@ -261,8 +318,10 @@ class Player(Game):
             self.jumpedFromCeiling = False
     
     def CheckIfOnWall(self):  # checks if the player is on one if the walls
-        if self.player_rect.x == self.LEFT_WALL or self.player_rect.x == self.RIGHT_WALL:
+        if self.player_rect.x - 5 <= self.LEFT_WALL or self.player_rect.x + 5 >= self.RIGHT_WALL:
             self.onWall = True
+        else:
+            self.onWall = False
         return self.onWall
     
     def ControllerMovement(self, event):
@@ -330,12 +389,12 @@ class Player(Game):
 
     def CorrectAngleOnGround(self):
 
-        if self.player_rect.y == self.CEILING_HEIGHT:
+        if self.player_rect.y - 15 <= self.CEILING_HEIGHT:
             if self.PlayerGoingRight:
                 self.angle = 360
             else:
                 self.angle = 180
-        elif self.player_rect.y == self.FLOOR_HEIGHT:
+        elif self.player_rect.y + 5 >= self.FLOOR_HEIGHT:
             if self.PlayerGoingRight:
                 self.angle = 0
             else:
