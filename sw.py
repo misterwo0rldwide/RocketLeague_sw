@@ -43,28 +43,38 @@ class Game:
         if not turningRight:  # if the player going left
             # the angle needs to be changed so pygame will draw it correctly
             flipX = True
-            if 270 >= angle > 180:  #רביע שלישי s
+            if 270 >= angle > 180:  #רביע שלישי
+                self.players.PlayerUpsideDown = True
                 if angle == 270:
                     flipX = False
                     newAngle = 270
-                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:
+                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:  # right bottom wall
+                    self.players.PlayerUpsideDown = False
                     flipY = False
                     newAngle = -(angle % 90)
                 else:
                     flipY = True
                     newAngle = angle % 90
             else: #רביע שני
-                if self.players.player_rect.y == self.players.CEILING_HEIGHT or self.players.jumpedFromCeiling:
+                self.players.PlayerUpsideDown = False
+                if self.players.player_rect.y == self.players.CEILING_HEIGHT or self.players.jumpedFromCeiling:  # if on ceiling or jumped from ceiling
                     flipY = True
-                newAngle = 180-angle
+                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:  # right upper wall
+                    self.players.PlayerUpsideDown = True
+                    flipX, flipY = False, False
+                    newAngle = angle
+                else:  
+                    newAngle = 180-angle
         else: # if the player going right
             if 360 >= angle >= 270: # רביע רביעי
+                self.players.PlayerUpsideDown = True
                 flipY = True
                 if angle == 360: 
                     newAngle = 0
                 else:
                     newAngle = 90-angle%90
             else: # if the player in רביע ראשון then nothing needs to be changed
+                self.players.PlayerUpsideDown = False
                 newAngle = angle
         
         image = pygame.transform.rotate(image, newAngle)
@@ -164,6 +174,7 @@ class Player():
 
         self.PlayerGoingRight = True
         self.onWall = False
+        self.PlayerUpsideDown = False
         
         self.SetPlayers()
     
@@ -218,7 +229,7 @@ class Player():
         if xDiffRight < self.DISTANCE_FROM__WALL:  # right wall
             xDiff = abs(xDiffRight - self.DISTANCE_FROM__WALL)
             if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff): # right bottom ramp
-                if 270 >= self.angle >= 180:
+                if 270 >= self.angle >= 180:   # going down the ramp
                     self.PlayerGoingRight = False
                     xDiff -= 2 + self.speed * 0.5
                     self.player_rect.x -= 2 + self.speed * 0.5
@@ -228,8 +239,15 @@ class Player():
                 if not self.PlayerGoingRight:
                     self.angle += 180
             elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # right upper ramp
+                if 180 >= self.angle >= 90:  # going up the ramp
+                    self.PlayerGoingRight = False
+                    xDiff -= 2 + self.speed * 0.5
+                    self.player_rect.x -= 2 + self.speed * 0.5
+
                 self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
                 self.angle = 360 - self.__GetPlayerAngleOnSides(xDiff)
+                if not self.PlayerGoingRight:
+                    self.angle -= 180
         elif xDiffLeft < self.DISTANCE_FROM__WALL:  # left wall
             xDiff = abs(xDiffLeft - self.DISTANCE_FROM__WALL)
             if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff):  # left bottom  ramp
@@ -276,7 +294,7 @@ class Player():
                 else:
                     angle -= 90
             elif 180 >= angle > 90 or 360 >= angle > 270:
-                if self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT:  # because the player is upside down and the angle is intended to be upright
+                if self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT or self.PlayerUpsideDown:  # because the player is upside down and the angle is intended to be upright
                     angle += 90
                 else:
                     angle -= 90
