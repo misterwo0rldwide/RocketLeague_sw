@@ -4,10 +4,12 @@ from pygame.locals import *
 import math
 import time
 
-
+WIDTH_SCREEN_VIEW = 1500
+HEIGHT_SCREEN_VIEW = 800
 
 # Initialize Pygame
 pygame.init()
+SCREEN = pygame.display.set_mode((WIDTH_SCREEN_VIEW, HEIGHT_SCREEN_VIEW))
 
 class Server:
     pass
@@ -17,24 +19,19 @@ class Game:
     #Frames in second - cycles
     REFRESH_RATE = 60
     
-    
     #Set Clock
     clock = pygame.time.Clock()
     
-    def __init__(self, width, height):
-        
-        self.width = width
-        self.height = height
-        
-        self.screen = pygame.display.set_mode((self.width, self.height))
+    def __init__(self, players):
+
+        self.players = players
+        self.screen = SCREEN
         pygame.display.set_caption("Rocket League")
 
         # Load the background image
         self.background_image = pygame.image.load("background.png").convert()
     
-    def GetPlayers(self, players):
-        self.players = players
-    
+
     def ChangePlayerPictureWithAngle(self, image):
         angle = self.players.angle
         turningRight = self.players.PlayerGoingRight
@@ -76,8 +73,8 @@ class Game:
 
     def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
 
-        bg_x = self.width // 2 - self.players.player_rect.centerx
-        bg_y = self.height // 2 - self.players.player_rect.centery
+        bg_x = WIDTH_SCREEN_VIEW // 2 - self.players.player_rect.centerx
+        bg_y = HEIGHT_SCREEN_VIEW // 2 - self.players.player_rect.centery
 
         if bg_x >= 0:  # if the player is right to the left barrier, bg_x will be minus
             bg_x = 0  # dont let it go over the limit
@@ -131,7 +128,7 @@ class Game:
             zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
             
             xDiff, yDiff = self.CorrectPlayerPlace(bg_x, bg_y)  #  move the player to be on the right place on screen
-            zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
+            zoomed_player_rect = zoomed_player_image.get_rect(center=(WIDTH_SCREEN_VIEW // 2 + xDiff, HEIGHT_SCREEN_VIEW // 2 + yDiff))
 
             # Draw everything
             self.screen.blit(self.background_image, (bg_x, bg_y))
@@ -145,10 +142,8 @@ class Game:
             self.clock.tick(self.REFRESH_RATE)
 
 
-class Player(Game):
-    WIDTH_SCREEN_VIEW = 1500
-    HEIGHT_SCREEN_VIEW = 800
 
+class Player():
 
     FLOOR_HEIGHT = 850
     CEILING_HEIGHT = 100
@@ -159,7 +154,6 @@ class Player(Game):
     GRAVITY_FORCE = 10
 
     def __init__(self, speed):
-        super().__init__(self.WIDTH_SCREEN_VIEW, self.HEIGHT_SCREEN_VIEW)
     
         pygame.joystick.init()
         self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
@@ -440,8 +434,8 @@ class Player(Game):
 
 
 player = Player(7)
-player.GetPlayers(player)
-player.MainLoop()
+game = Game(player)
+game.MainLoop()
 
 pygame.quit()
 sys.exit()
