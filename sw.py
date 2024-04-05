@@ -68,14 +68,23 @@ class Game:
         else: # if the player going right
             if 360 >= angle >= 270: # רביע רביעי
                 self.players.PlayerUpsideDown = True
-                flipY = True
-                if angle == 360: 
-                    newAngle = 0
+                if x - self.players.DISTANCE_FROM__WALL < self.players.LEFT_WALL:  # if on left bottom wall
+                    flipY = False
+                    newAngle = - (360 - angle)
                 else:
-                    newAngle = 90-angle%90
-            else: # if the player in רביע ראשון then nothing needs to be changed
-                self.players.PlayerUpsideDown = False
-                newAngle = angle
+                    flipY = True
+                    if angle == 360: 
+                        newAngle = 0
+                    else:
+                        newAngle = 90-angle%90
+            else:# רביע ראשון
+                if x - self.players.DISTANCE_FROM__WALL < self.players.LEFT_WALL:  # if on the left upper wall
+                    flipY = True
+                    self.players.PlayerUpsideDown = True
+                    newAngle = -angle
+                else:
+                    self.players.PlayerUpsideDown = False
+                    newAngle = angle
         
         image = pygame.transform.rotate(image, newAngle)
         return pygame.transform.flip(image, flipX, flipY) 
@@ -251,11 +260,29 @@ class Player():
         elif xDiffLeft < self.DISTANCE_FROM__WALL:  # left wall
             xDiff = abs(xDiffLeft - self.DISTANCE_FROM__WALL)
             if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff):  # left bottom  ramp
+                if 360 > self.angle >= 270:  # going down the ramp
+                    self.PlayerGoingRight = True
+                    xDiff -= 2 + self.speed * 0.5
+                    self.player_rect.y += 2 + self.speed * 0.5
+                    self.player_rect.x += 2 + self.speed * 0.5
+
+
                 self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
                 self.angle = 180 - self.__GetPlayerAngleOnSides(xDiff)
+                if self.PlayerGoingRight:
+                    self.angle = 270 + self.angle % 90
             elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # left upper ramp
+                if 90 >= self.angle > 0:  # if going up the ramp
+                    self.PlayerGoingRight = True
+                    xDiff -= 2 + self.speed * 0.5
+                    self.player_rect.y -= 2 + self.speed * 0.5
+                    self.player_rect.x += 2 + self.speed * 0.5
+
+
                 self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
                 self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
+                if self.PlayerGoingRight:
+                    self.angle = self.angle % 90
  
         self.CheckBoundariesDurringJump()
 
@@ -276,11 +303,10 @@ class Player():
 
             if timeDiff == 0:
                 timeDiff = 0.1
-            yPower = (-(self.player_rect.y - self.yBefore) / timeDiff)+75
+            yPower = (-(self.player_rect.y - self.yBefore) / timeDiff)
             xPower = ((self.player_rect.x - self.xBefore) / timeDiff)
             
-            vectorSpeed = math.sqrt(yPower**2 + xPower**2)
-            xVectorSpeed = vectorSpeed
+            vectorSpeed = math.sqrt(yPower**2 + xPower**2) + 50
             angle = self.angle
 
             if angle == 90:  # those angles can show twice - or right or left
@@ -288,21 +314,26 @@ class Player():
                     angle -= 90
                 else:
                     angle += 90
+                    xPower = -30
             elif angle == 270:
                 if not self.PlayerGoingRight:
                     angle += 90
                 else:
                     angle -= 90
+                    xPower = -30
             elif 180 >= angle > 90 or 360 >= angle > 270:
-                if self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT or self.PlayerUpsideDown:  # because the player is upside down and the angle is intended to be upright
+                if (self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT) or (self.PlayerUpsideDown and self.player_rect.x - self.DISTANCE_FROM__WALL <= self.LEFT_WALL) or (not self.PlayerGoingRight and self.player_rect.x + self.DISTANCE_FROM__WALL >= self.RIGHT_WALL):  # because the player is upside down and the angle is intended to be upright
                     angle += 90
                 else:
                     angle -= 90
             else:
-                angle += 90
-            
+                if (self.PlayerUpsideDown and self.PlayerGoingRight) or (not self.PlayerUpsideDown and not self.PlayerGoingRight):
+                    angle -= 90
+                else:
+                    angle += 90
+
             self.Fy = vectorSpeed * math.sin(math.radians(angle))
-            self.Fx = xVectorSpeed * math.cos(math.radians(angle)) +xPower
+            self.Fx = vectorSpeed * math.cos(math.radians(angle)) + xPower
         
         timeDiff = (time.time() - self.time) * self.speed + 0.01 # if timeDiff is zero it won't count it so we will add a little bit
         self.player_rect.y = self.yBefore - self.Fy * timeDiff + (self.GRAVITY_FORCE*2) * timeDiff ** 2
