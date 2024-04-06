@@ -283,6 +283,7 @@ class Player():
                 self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
                 if self.PlayerGoingRight:
                     self.angle = self.angle % 90
+                
  
         self.CheckBoundariesDurringJump()
 
@@ -293,7 +294,6 @@ class Player():
         # x = x0 + v0(t1 - t0)
         
         # we will use F=ma to calculate the v0
-        
 
         if not self.inJump:  # if first time in this function (right after the player pressed jump)
             if self.player_rect.y == self.CEILING_HEIGHT:
@@ -432,12 +432,12 @@ class Player():
 
     def CorrectAngleOnGround(self):
 
-        if self.player_rect.y - 15 <= self.CEILING_HEIGHT:
+        if self.player_rect.y <= self.CEILING_HEIGHT:
             if self.PlayerGoingRight:
                 self.angle = 360
             else:
                 self.angle = 180
-        elif self.player_rect.y + 5 >= self.FLOOR_HEIGHT:
+        elif self.player_rect.y >= self.FLOOR_HEIGHT:
             if self.PlayerGoingRight:
                 self.angle = 0
             else:
@@ -449,7 +449,6 @@ class Player():
             self.xBefore = self.player_rect.x
             self.yBefore = self.player_rect.y
 
-        
         if self.inJump:
             self.PlayerJump()
         else:
