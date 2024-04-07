@@ -33,58 +33,10 @@ class Game:
     
 
     def ChangePlayerPictureWithAngle(self, image):
-        angle = self.players.angle
-        turningRight = self.players.PlayerGoingRight
-        x = self.players.player_rect.x
-        y = self.players.player_rect.y
         newAngle = 0
         flipY = False
         flipX = False
-        if not turningRight:  # if the player going left
-            # the angle needs to be changed so pygame will draw it correctly
-            flipX = True
-            if 270 >= angle > 180:  #רביע שלישי
-                self.players.PlayerUpsideDown = True
-                if angle == 270:
-                    flipX = False
-                    newAngle = 270
-                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:  # right bottom wall
-                    self.players.PlayerUpsideDown = False
-                    flipY = False
-                    newAngle = -(angle % 90)
-                else:
-                    flipY = True
-                    newAngle = angle % 90
-            else: #רביע שני
-                self.players.PlayerUpsideDown = False
-                if self.players.player_rect.y == self.players.CEILING_HEIGHT or self.players.jumpedFromCeiling:  # if on ceiling or jumped from ceiling
-                    flipY = True
-                elif x + self.players.DISTANCE_FROM__WALL > self.players.RIGHT_WALL:  # right upper wall
-                    self.players.PlayerUpsideDown = True
-                    flipX, flipY = False, False
-                    newAngle = angle
-                else:  
-                    newAngle = 180-angle
-        else: # if the player going right
-            if 360 >= angle >= 270: # רביע רביעי
-                self.players.PlayerUpsideDown = True
-                if x - self.players.DISTANCE_FROM__WALL < self.players.LEFT_WALL:  # if on left bottom wall
-                    flipY = False
-                    newAngle = - (360 - angle)
-                else:
-                    flipY = True
-                    if angle == 360: 
-                        newAngle = 0
-                    else:
-                        newAngle = 90-angle%90
-            else:# רביע ראשון
-                if x - self.players.DISTANCE_FROM__WALL < self.players.LEFT_WALL:  # if on the left upper wall
-                    flipY = True
-                    self.players.PlayerUpsideDown = True
-                    newAngle = -angle
-                else:
-                    self.players.PlayerUpsideDown = False
-                    newAngle = angle
+        
         
         image = pygame.transform.rotate(image, newAngle)
         return pygame.transform.flip(image, flipX, flipY) 
@@ -164,29 +116,44 @@ class Game:
 
 class Player():
 
+    # heights and x values of walls
     FLOOR_HEIGHT = 850
     CEILING_HEIGHT = 100
     RIGHT_WALL = 2150
     LEFT_WALL = 300
-    DISTANCE_FROM__WALL = 110
+    DISTANCE_FROM__WALL = 110  # distance from wall of ramp
 
-    GRAVITY_FORCE = 10
+    GRAVITY_FORCE = 1000  # gravity on player
 
-    def __init__(self, speed):
-    
+    REFRESH_RATE_TIME = 1/60  # we need the refresh rate time to calculate time differences
+
+    MAX_SPEED = 350
+
+    def __init__(self):
+        
+        self.MAX_VECTOR = 1000
+
         pygame.joystick.init()
-        self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
-        self.motion = [0, 0]
-        self.speed = speed
-        self.inJump = False
-        self.angle = 0
+        self.joystick = pygame.joystick.Joystick(0)
+        self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]  # set controller movement
+        self.angle = 0  # set angle of player
 
-        self.PlayerGoingRight = True
-        self.onWall = False
-        self.PlayerUpsideDown = False
+        # we will use for this game two vectors, xVector and yVector
+        self.xVector = 0
+        self.yVector = self.GRAVITY_FORCE
         
         self.SetPlayers()
+
+
+        #to calculate the vectors we will need to have the previous x and y
+        self.prevX = self.player_rect.x
+        self.prevY = self.player_rect.y
+
+        # and also need current speed
+        self.xSpeed = 0
+        self.ySpeed = 0
     
+    #set players image
     def SetPlayers(self):
         self.player_image = pygame.transform.scale(pygame.image.load("player.png"), (50,25))
         self.player_image.set_colorkey((0,0,0))
@@ -195,7 +162,42 @@ class Player():
         self.player_rect.x = 500
         self.player_rect.y = 850
 
-    
+    #controls of the game - controller and keyboard
+    def ControllerMovement(self, event):
+        if event.type == JOYDEVICEADDED:  # if the device was diconnected
+            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+            for joystick in self.joysticks:
+                print(joystick.get_name())
+        if event.type == JOYDEVICEREMOVED:
+            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+        if event.type == JOYBUTTONDOWN:  # if button was pressed
+            if event.button == 1:  # if O button was pressed
+                self.speed *= 2
+            #elif event.button == 0 and not self.inJump:  #if player pressed jump and already in jump
+            #    self.time = time.time()
+            #    self.PlayerJump()
+                
+        if event.type == JOYBUTTONUP:  # if button was released
+            if event.button == 1:  # if O button was released
+                self.speed /= 2
+
+        self.xVector = self.joystick.get_axis(0) * self.MAX_VECTOR
+        self.yVector += self.joystick.get_axis(1) * self.GRAVITY_FORCE
+       
+    def KeyboardMotion(self):
+        keys = pygame.key.get_pressed()
+        if keys[pygame.K_LEFT]:
+            self.xVector = -self.MAX_VECTOR
+        if keys[pygame.K_RIGHT]:
+            self.xVector = self.MAX_VECTOR
+        if keys[pygame.K_UP]:
+            self.yVector = self.GRAVITY_FORCE / 2
+        if keys[pygame.K_DOWN]:
+            self.yVector = self.GRAVITY_FORCE * 1.5
+        if keys[pygame.K_SPACE]:# and if not on a wall
+            self.yVector = -self.GRAVITY_FORCE * 15
+
+   
     def __Function(self, x):
         return (x**2) / 100
 
@@ -206,282 +208,90 @@ class Player():
     def __GetPlayerAngleOnSides(self, xDiff):
         # we will get the angle of the player with incline of the function
         incline = self.__DerivativeFunction(xDiff)
-        angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
-        angle = int(angle)
-        if angle < 0:
-            angle = abs(angle)
-            angle += 180 + (180 - angle)
-
-        return angle
-
-    def MatchAngleOfplayerToWall(self):  # checks if the player is on the wall, if so correct its angle
-        if self.CheckIfOnWall():
-            if 180 >= self.angle >= 0:
-                if self.yBefore < self.player_rect.y:  # if player going down
-                    self.angle = 270
-                else:
-                    self.angle = 90
-            else:
-                if self.yBefore > self.player_rect.y:  # if player going up
-                    self.angle = 90
-                else:
-                    self.angle = 270
-        else:
-            return False
-
-
-    def ChangePlayerHeightOnRamps(self):
-        
-        # we will check on which side the player is and the build the right equation according to the side
-        xDiffRight = self.RIGHT_WALL - self.player_rect.x
-        xDiffLeft = self.player_rect.x - self.LEFT_WALL
-        if xDiffRight < self.DISTANCE_FROM__WALL:  # right wall
-            xDiff = abs(xDiffRight - self.DISTANCE_FROM__WALL)
-            if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff): # right bottom ramp
-                if 270 >= self.angle >= 180:   # going down the ramp
-                    self.PlayerGoingRight = False
-                    xDiff -= 2 + self.speed * 0.5
-                    self.player_rect.x -= 2 + self.speed * 0.5
-                self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
-                
-                self.angle = self.__GetPlayerAngleOnSides(xDiff)
-                if not self.PlayerGoingRight:
-                    self.angle += 180
-            elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # right upper ramp
-                if 180 >= self.angle >= 90:  # going up the ramp
-                    self.PlayerGoingRight = False
-                    xDiff -= 2 + self.speed * 0.5
-                    self.player_rect.x -= 2 + self.speed * 0.5
-
-                self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
-                self.angle = 360 - self.__GetPlayerAngleOnSides(xDiff)
-                if not self.PlayerGoingRight:
-                    self.angle -= 180
-        elif xDiffLeft < self.DISTANCE_FROM__WALL:  # left wall
-            xDiff = abs(xDiffLeft - self.DISTANCE_FROM__WALL)
-            if self.player_rect.y > self.FLOOR_HEIGHT - self.__Function(xDiff):  # left bottom  ramp
-                if 360 > self.angle >= 270:  # going down the ramp
-                    self.PlayerGoingRight = True
-                    xDiff -= 2 + self.speed * 0.5
-                    self.player_rect.y += 2 + self.speed * 0.5
-                    self.player_rect.x += 2 + self.speed * 0.5
-
-
-                self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiff)
-                self.angle = 180 - self.__GetPlayerAngleOnSides(xDiff)
-                if self.PlayerGoingRight:
-                    self.angle = 270 + self.angle % 90
-            elif self.player_rect.y < self.CEILING_HEIGHT + self.__Function(xDiff):  # left upper ramp
-                if 90 >= self.angle > 0:  # if going up the ramp
-                    self.PlayerGoingRight = True
-                    xDiff -= 2 + self.speed * 0.5
-                    self.player_rect.y -= 2 + self.speed * 0.5
-                    self.player_rect.x += 2 + self.speed * 0.5
-
-
-                self.player_rect.y = self.CEILING_HEIGHT + self.__Function(xDiff)
-                self.angle = 180 + self.__GetPlayerAngleOnSides(xDiff)
-                if self.PlayerGoingRight:
-                    self.angle = self.angle % 90
-                
- 
-        self.CheckBoundariesDurringJump()
-
+        self.angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
+        self.angle = int(self.angle)
     
-    def PlayerJump(self):
-        # we will use one physics equation
-        # y = y0 + v0*t - 5*t**2
-        # x = x0 + v0(t1 - t0)
-        
-        # we will use F=ma to calculate the v0
 
-        if not self.inJump:  # if first time in this function (right after the player pressed jump)
-            if self.player_rect.y == self.CEILING_HEIGHT:
-                self.jumpedFromCeiling = True
-            self.inJump = True
-            timeDiff = time.time() - self.time
+    #the player need to adjust its angle
+    def PlayerOnRamps(self):
+        xPlayer = self.player_rect.x
 
-            if timeDiff == 0:
-                timeDiff = 0.1
-            yPower = (-(self.player_rect.y - self.yBefore) / timeDiff)
-            xPower = ((self.player_rect.x - self.xBefore) / timeDiff)
-            
-            vectorSpeed = math.sqrt(yPower**2 + xPower**2) + 50
-            angle = self.angle
-
-            if angle == 90:  # those angles can show twice - or right or left
-                if not self.PlayerGoingRight:
-                    angle -= 90
-                else:
-                    angle += 90
-                    xPower = -30
-            elif angle == 270:
-                if not self.PlayerGoingRight:
-                    angle += 90
-                else:
-                    angle -= 90
-                    xPower = -30
-            elif 180 >= angle > 90 or 360 >= angle > 270:
-                if (self.angle == 180 and self.player_rect.y == self.CEILING_HEIGHT) or (self.PlayerUpsideDown and self.player_rect.x - self.DISTANCE_FROM__WALL <= self.LEFT_WALL) or (not self.PlayerGoingRight and self.player_rect.x + self.DISTANCE_FROM__WALL >= self.RIGHT_WALL):  # because the player is upside down and the angle is intended to be upright
-                    angle += 90
-                else:
-                    angle -= 90
-            else:
-                if (self.PlayerUpsideDown and self.PlayerGoingRight) or (not self.PlayerUpsideDown and not self.PlayerGoingRight):
-                    angle -= 90
-                else:
-                    angle += 90
-
-            self.Fy = vectorSpeed * math.sin(math.radians(angle))
-            self.Fx = vectorSpeed * math.cos(math.radians(angle)) + xPower
+        #check if right wall
+        if self.RIGHT_WALL - xPlayer < self.DISTANCE_FROM__WALL:  # right wall
+            xDiffRightWall = self.DISTANCE_FROM__WALL - (self.RIGHT_WALL - xPlayer)
+            self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiffRightWall) if self.FLOOR_HEIGHT - self.player_rect.y <= self.__Function(xDiffRightWall)\
+                                 else self.CEILING_HEIGHT + self.__Function(xDiffRightWall) if self.player_rect.y - self.CEILING_HEIGHT < self.__Function(xDiffRightWall)\
+                                 else self.player_rect.y
+        elif xPlayer - self.LEFT_WALL < self.DISTANCE_FROM__WALL:  # left wall
+            xDiffLeftWall = self.DISTANCE_FROM__WALL - (xPlayer - self.LEFT_WALL)
+            self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if self.FLOOR_HEIGHT - self.player_rect.y <= self.__Function(xDiffLeftWall)\
+                                 else self.CEILING_HEIGHT + self.__Function(xDiffLeftWall) if self.player_rect.y - self.CEILING_HEIGHT < self.__Function(xDiffLeftWall)\
+                                 else self.player_rect.y
         
-        timeDiff = (time.time() - self.time) * self.speed + 0.01 # if timeDiff is zero it won't count it so we will add a little bit
-        self.player_rect.y = self.yBefore - self.Fy * timeDiff + (self.GRAVITY_FORCE*2) * timeDiff ** 2
-        self.player_rect.x = self.xBefore + self.Fx * timeDiff
         
-        self.CheckBoundariesDurringJump()  # check boundaries
-        
-    
-    def CheckBoundariesDurringJump(self):
-        if self.player_rect.y <= self.CEILING_HEIGHT:
-            self.player_rect.y = self.CEILING_HEIGHT
-            self.inJump = False
-            self.jumpedFromCeiling = False
-        if self.player_rect.y >= self.FLOOR_HEIGHT:
-            self.player_rect.y = self.FLOOR_HEIGHT
-            self.inJump = False
-            self.jumpedFromCeiling = False
-        if self.player_rect.x <= self.LEFT_WALL:
+    # prevent the player from moving beyond walls
+    def PlayerBoundaries(self):
+        if self.player_rect.x < self.LEFT_WALL:
             self.player_rect.x = self.LEFT_WALL
-            self.inJump = False
-            self.jumpedFromCeiling = False
-        if self.player_rect.x >= self.RIGHT_WALL:
+            self.xSpeed = 0
+        elif self.player_rect.x > self.RIGHT_WALL:
             self.player_rect.x = self.RIGHT_WALL
-            self.inJump = False
-            self.jumpedFromCeiling = False
-    
-    def CheckIfOnWall(self):  # checks if the player is on one if the walls
-        if self.player_rect.x - 5 <= self.LEFT_WALL or self.player_rect.x + 5 >= self.RIGHT_WALL:
-            self.onWall = True
-        else:
-            self.onWall = False
-        return self.onWall
-    
-    def ControllerMovement(self, event):
-        if event.type == JOYAXISMOTION:  # axis motion
-            if event.axis < 2:
-                self.motion[event.axis] = event.value
-        if event.type == JOYDEVICEADDED:  # if the device was diconnected
-            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-            for joystick in self.joysticks:
-                print(joystick.get_name())
-        if event.type == JOYDEVICEREMOVED:
-            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-        if event.type == JOYBUTTONDOWN:  # if button was pressed
-            if event.button == 1:  # if O button was pressed
-                self.speed *= 2
-            elif event.button == 0 and not self.inJump:  #if player pressed jump and already in jump
-                self.time = time.time()
-                self.PlayerJump()
-                
-        if event.type == JOYBUTTONUP:  # if button was released
-            if event.button == 1:  # if O button was released
-                self.speed /= 2
-        
-        if event.type == pygame.KEYUP:  # the only way to check if the keyboard was released is in event type
-            if event.key == pygame.K_RCTRL:
-                self.speed /= 2
-                
-        
-        if abs(self.motion[0]) < 0.1:
-            self.motion[0] = 0
-        if abs(self.motion[1]) < 0.1:
-            self.motion[1] = 0
-    
-    def KeyboardMotion(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_RCTRL] and self.speed < 20:
-            self.speed *= 2
-        if keys[pygame.K_LEFT] and self.player_rect.x > self.LEFT_WALL:
-            self.player_rect.x -= self.speed
-        if keys[pygame.K_RIGHT] and self.player_rect.x < self.RIGHT_WALL:
-            self.player_rect.x += self.speed
-        if keys[pygame.K_UP] and self.player_rect.y > self.CEILING_HEIGHT:
-            self.player_rect.y -= self.speed
-        if keys[pygame.K_DOWN] and self.player_rect.y < self.FLOOR_HEIGHT:
-            self.player_rect.y += self.speed
-        if keys[pygame.K_SPACE] and not self.inJump:
-            self.time = time.time()
-            self.PlayerJump()
-    
-    def ControllerMovmentHandling(self):
-        self.player_rect.x += self.motion[0] * self.speed
-        if self.player_rect.x > self.RIGHT_WALL or self.player_rect.x < self.LEFT_WALL:
-            self.player_rect.x -= self.motion[0] * self.speed
-        self.player_rect.y += self.motion[1] * 2
-        if self.player_rect.y > self.FLOOR_HEIGHT or self.player_rect.y < self.CEILING_HEIGHT:
-            self.player_rect.y -= self.motion[1] * 2
-    
-    def ChangAngleInTurn(self):
-        if 360 >= self.angle >= 270:
-            self.angle = 180 + 360 - self.angle
-        elif 270 > self.angle > 180:
-            self.angle = 360 - self.angle % 90
-        else:
-            self.angle = 180 - self.angle
+            self.xSpeed = 0
 
-    def CorrectAngleOnGround(self):
+        if self.player_rect.y > self.FLOOR_HEIGHT:
+            self.player_rect.y = self.FLOOR_HEIGHT
+            self.ySpeed = 0
+        elif self.player_rect.y < self.CEILING_HEIGHT:
+            self.player_rect.y = self.CEILING_HEIGHT
+            self.ySpeed = 0
+    
 
-        if self.player_rect.y <= self.CEILING_HEIGHT:
-            if self.PlayerGoingRight:
-                self.angle = 360
-            else:
-                self.angle = 180
-        elif self.player_rect.y >= self.FLOOR_HEIGHT:
-            if self.PlayerGoingRight:
-                self.angle = 0
-            else:
-                self.angle = 180
+    #this function will calculate where the players need to be according to the vectors
+    def CalculatePlayerPlace(self):
+        # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
+        # we will use this function for both of the axis, one for the x axis and one for the y axis
+
+        # firstly we will need the speed which we will calculate 
+        # we will use currentSpeed = prevSpeed + acceleration * timeDiff
+        self.xSpeed = self.xSpeed + self.xVector * self.REFRESH_RATE_TIME
+        self.ySpeed = self.ySpeed + self.yVector * self.REFRESH_RATE_TIME
+
+        self.xSpeed = self.MAX_SPEED if self.xSpeed > self.MAX_SPEED else -self.MAX_SPEED if self.xSpeed < -self.MAX_SPEED else self.xSpeed
+        self.ySpeed = self.MAX_SPEED * 2 if self.ySpeed > self.MAX_SPEED * 2 else -self.MAX_SPEED * 2 if self.ySpeed < -self.MAX_SPEED * 2 else self.ySpeed
+
+        # now lets put it into the current place
+
+        xDiff = self.xSpeed*self.REFRESH_RATE_TIME + (self.xVector / 2) * self.REFRESH_RATE_TIME ** 2
+        yDiff = self.ySpeed*self.REFRESH_RATE_TIME + (self.yVector / 2) * self.REFRESH_RATE_TIME ** 2
+
+        self.player_rect.x = self.prevX + xDiff
+        self.player_rect.y = self.prevY + yDiff
+
+        # now we return the vectors to the starting phase
+        self.xVector = 0
+        self.yVector = self.GRAVITY_FORCE
+
 
     def PlayerMotion(self):
-        if not self.inJump:  # if not in jump motion we need to get the x and y
-                             # in case we will jump we need to know the difference between the last place and current place so we will know the speed
-            self.xBefore = self.player_rect.x
-            self.yBefore = self.player_rect.y
-
-        if self.inJump:
-            self.PlayerJump()
-        else:
-            self.CorrectAngleOnGround()
-            self.ControllerMovmentHandling()
-            self.KeyboardMotion()
+        # save the last place 
+        self.prevX = self.player_rect.x
+        self.prevY = self.player_rect.y
         
-        self.ChangePlayerHeightOnRamps()
-        self.MatchAngleOfplayerToWall()
-            
+        self.KeyboardMotion()
+        self.CalculatePlayerPlace()
+        self.PlayerOnRamps()
+        self.PlayerBoundaries()
 
-        if self.xBefore < self.player_rect.x and not self.PlayerGoingRight and not self.inJump:  # if turned right from left
-            self.PlayerGoingRight = True
 
-            if not self.onWall:
-                self.ChangAngleInTurn()
-            else:
-                self.onWall = False
 
-        elif self.xBefore > self.player_rect.x and self.PlayerGoingRight and not self.inJump:  # if turned left from right
-            self.PlayerGoingRight = False
-            
-            if not self.onWall:
-                self.ChangAngleInTurn()
-            else:
-                self.onWall = False
-            
-        print(self.angle)
+
+
+
             
         
 
 
-player = Player(7)
+player = Player()
 game = Game(player)
 game.MainLoop()
 
