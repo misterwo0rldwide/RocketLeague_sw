@@ -2,7 +2,7 @@ import pygame
 import sys
 from pygame.locals import *
 import math
-import time
+import physics
 
 WIDTH_SCREEN_VIEW = 1500
 HEIGHT_SCREEN_VIEW = 800
@@ -33,13 +33,13 @@ class Game:
     
 
     def ChangePlayerPictureWithAngle(self, image):
-        newAngle = 0
-        flipY = False
-        flipX = False
-        
+        newAngle = self.players.PlayerObject.angle
+        #flipX = self.players.PlayerObject.flipX
+
+
         
         image = pygame.transform.rotate(image, newAngle)
-        return pygame.transform.flip(image, flipX, flipY) 
+        return pygame.transform.flip(image, True, False) 
             
 
     def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
@@ -115,43 +115,23 @@ class Game:
 
 
 class Player():
-
-    # heights and x values of walls
-    FLOOR_HEIGHT = 850
-    CEILING_HEIGHT = 100
-    RIGHT_WALL = 2150
-    LEFT_WALL = 300
-    DISTANCE_FROM__WALL = 110  # distance from wall of ramp
-
-    GRAVITY_FORCE = 1000  # gravity on player
-
-    REFRESH_RATE_TIME = 1/60  # we need the refresh rate time to calculate time differences
-
-    MAX_SPEED = 350
-
     def __init__(self):
-        
-        self.MAX_VECTOR = 1000
 
         pygame.joystick.init()
-        self.joystick = pygame.joystick.Joystick(0)
-        self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]  # set controller movement
-        self.angle = 0  # set angle of player
+        if pygame.joystick.get_count() > 0:
 
-        # we will use for this game two vectors, xVector and yVector
-        self.xVector = 0
-        self.yVector = self.GRAVITY_FORCE
+            self.joystick = pygame.joystick.Joystick(0)
+            self.joystick.init()
+
+
+        self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]  # set controller movement
         
         self.SetPlayers()
 
+        self.PlayerObject = physics.Object(100, 75, 100, (self.player_rect.x, self.player_rect.y))
 
-        #to calculate the vectors we will need to have the previous x and y
-        self.prevX = self.player_rect.x
-        self.prevY = self.player_rect.y
-
-        # and also need current speed
-        self.xSpeed = 0
-        self.ySpeed = 0
+        self.accelrationX = 0
+        self.accelrationY = self.PlayerObject.GRAVITY_FORCE_ACCELARATION
     
     #set players image
     def SetPlayers(self):
@@ -164,123 +144,40 @@ class Player():
 
     #controls of the game - controller and keyboard
     def ControllerMovement(self, event):
-        if event.type == JOYDEVICEADDED:  # if the device was diconnected
-            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-            for joystick in self.joysticks:
-                print(joystick.get_name())
-        if event.type == JOYDEVICEREMOVED:
-            self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-        if event.type == JOYBUTTONDOWN:  # if button was pressed
-            if event.button == 1:  # if O button was pressed
-                self.speed *= 2
-            #elif event.button == 0 and not self.inJump:  #if player pressed jump and already in jump
-            #    self.time = time.time()
-            #    self.PlayerJump()
-                
-        if event.type == JOYBUTTONUP:  # if button was released
-            if event.button == 1:  # if O button was released
-                self.speed /= 2
+        if pygame.joystick.get_count() > 0:
+            if event.type == JOYDEVICEADDED:  # if the device was diconnected
+                self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+            if event.type == JOYDEVICEREMOVED:
+                self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+            if event.type == JOYBUTTONDOWN:  # if button was pressed
+                if event.button == 1:  # if O button was pressed
+                    self.speed *= 2
 
-        self.xVector = self.joystick.get_axis(0) * self.MAX_VECTOR
-        self.yVector += self.joystick.get_axis(1) * self.GRAVITY_FORCE
+
+            self.accelrationX, self.accelrationY = self.joystick.get_axis(0),  self.joystick.get_axis(1)
        
     def KeyboardMotion(self):
         keys = pygame.key.get_pressed()
         if keys[pygame.K_LEFT]:
-            self.xVector = -self.MAX_VECTOR
+            self.accelrationX = -1
         if keys[pygame.K_RIGHT]:
-            self.xVector = self.MAX_VECTOR
+            self.accelrationX = 1
         if keys[pygame.K_UP]:
-            self.yVector = self.GRAVITY_FORCE / 2
+            pass
         if keys[pygame.K_DOWN]:
-            self.yVector = self.GRAVITY_FORCE * 1.5
-        if keys[pygame.K_SPACE]:# and if not on a wall
-            self.yVector = -self.GRAVITY_FORCE * 15
-
-   
-    def __Function(self, x):
-        return (x**2) / 100
-
-    def __DerivativeFunction(self, x):
-        return 2*x / 100
-
-    # the sides of the map require the player to change its angle
-    def __GetPlayerAngleOnSides(self, xDiff):
-        # we will get the angle of the player with incline of the function
-        incline = self.__DerivativeFunction(xDiff)
-        self.angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
-        self.angle = int(self.angle)
-    
-
-    #the player need to adjust its angle
-    def PlayerOnRamps(self):
-        xPlayer = self.player_rect.x
-
-        #check if right wall
-        if self.RIGHT_WALL - xPlayer < self.DISTANCE_FROM__WALL:  # right wall
-            xDiffRightWall = self.DISTANCE_FROM__WALL - (self.RIGHT_WALL - xPlayer)
-            self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiffRightWall) if self.FLOOR_HEIGHT - self.player_rect.y <= self.__Function(xDiffRightWall)\
-                                 else self.CEILING_HEIGHT + self.__Function(xDiffRightWall) if self.player_rect.y - self.CEILING_HEIGHT < self.__Function(xDiffRightWall)\
-                                 else self.player_rect.y
-        elif xPlayer - self.LEFT_WALL < self.DISTANCE_FROM__WALL:  # left wall
-            xDiffLeftWall = self.DISTANCE_FROM__WALL - (xPlayer - self.LEFT_WALL)
-            self.player_rect.y = self.FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if self.FLOOR_HEIGHT - self.player_rect.y <= self.__Function(xDiffLeftWall)\
-                                 else self.CEILING_HEIGHT + self.__Function(xDiffLeftWall) if self.player_rect.y - self.CEILING_HEIGHT < self.__Function(xDiffLeftWall)\
-                                 else self.player_rect.y
-        
-        
-    # prevent the player from moving beyond walls
-    def PlayerBoundaries(self):
-        if self.player_rect.x < self.LEFT_WALL:
-            self.player_rect.x = self.LEFT_WALL
-            self.xSpeed = 0
-        elif self.player_rect.x > self.RIGHT_WALL:
-            self.player_rect.x = self.RIGHT_WALL
-            self.xSpeed = 0
-
-        if self.player_rect.y > self.FLOOR_HEIGHT:
-            self.player_rect.y = self.FLOOR_HEIGHT
-            self.ySpeed = 0
-        elif self.player_rect.y < self.CEILING_HEIGHT:
-            self.player_rect.y = self.CEILING_HEIGHT
-            self.ySpeed = 0
-    
-
-    #this function will calculate where the players need to be according to the vectors
-    def CalculatePlayerPlace(self):
-        # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
-        # we will use this function for both of the axis, one for the x axis and one for the y axis
-
-        # firstly we will need the speed which we will calculate 
-        # we will use currentSpeed = prevSpeed + acceleration * timeDiff
-        self.xSpeed = self.xSpeed + self.xVector * self.REFRESH_RATE_TIME
-        self.ySpeed = self.ySpeed + self.yVector * self.REFRESH_RATE_TIME
-
-        self.xSpeed = self.MAX_SPEED if self.xSpeed > self.MAX_SPEED else -self.MAX_SPEED if self.xSpeed < -self.MAX_SPEED else self.xSpeed
-        self.ySpeed = self.MAX_SPEED * 2 if self.ySpeed > self.MAX_SPEED * 2 else -self.MAX_SPEED * 2 if self.ySpeed < -self.MAX_SPEED * 2 else self.ySpeed
-
-        # now lets put it into the current place
-
-        xDiff = self.xSpeed*self.REFRESH_RATE_TIME + (self.xVector / 2) * self.REFRESH_RATE_TIME ** 2
-        yDiff = self.ySpeed*self.REFRESH_RATE_TIME + (self.yVector / 2) * self.REFRESH_RATE_TIME ** 2
-
-        self.player_rect.x = self.prevX + xDiff
-        self.player_rect.y = self.prevY + yDiff
-
-        # now we return the vectors to the starting phase
-        self.xVector = 0
-        self.yVector = self.GRAVITY_FORCE
+            pass
+        if keys[pygame.K_SPACE] and (self.PlayerObject.ObjectOnGround or self.PlayerObject.ObjectOnRamp):
+            self.accelrationY = -50
 
 
     def PlayerMotion(self):
-        # save the last place 
-        self.prevX = self.player_rect.x
-        self.prevY = self.player_rect.y
         
         self.KeyboardMotion()
-        self.CalculatePlayerPlace()
-        self.PlayerOnRamps()
-        self.PlayerBoundaries()
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY)
+        self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
+
+        self.accelrationX,self.accelrationY = 0,1
+
 
 
 
