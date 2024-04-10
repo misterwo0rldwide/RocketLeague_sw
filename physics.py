@@ -37,6 +37,9 @@ class Object:
 
     def __Function(self, x):
         return (x**2) / 100
+    
+    def __FindXValueForYValue(self, y):
+        return math.sqrt(y * 100)
 
     def __DerivativeFunction(self, x):
         return 2*x / 100
@@ -47,7 +50,6 @@ class Object:
         incline = self.__DerivativeFunction(xDiff)
         self.angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
         self.angle = int(self.angle)
-    
 
     #the player need to adjust its angle
     def __ObjectOnRamps(self):
@@ -58,9 +60,14 @@ class Object:
             xDiffRightWall = DISTANCE_FROM__WALL - (RIGHT_WALL - self.xPlace)
             onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffRightWall)
             onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffRightWall)
-            self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffRightWall) if onFloorRamp\
-                                 else CEILING_HEIGHT + self.__Function(xDiffRightWall) if onCeilingRamp\
-                                 else self.yPlace
+
+            if self.xSpeed > 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
+                self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffRightWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.__Function(xDiffRightWall) if onCeilingRamp\
+                                    else self.yPlace
+            elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - FLOOR_HEIGHT if onCeilingRamp else 0
+                self.xPlace = RIGHT_WALL - DISTANCE_FROM__WALL + self.__FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnRamp = True
@@ -70,15 +77,19 @@ class Object:
             xDiffLeftWall = DISTANCE_FROM__WALL - (self.xPlace - LEFT_WALL)
             onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall)
             onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall)
-            self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if onFloorRamp\
-                                 else CEILING_HEIGHT + self.__Function(xDiffLeftWall) if onCeilingRamp\
-                                 else self.yPlace
+            
+            if self.xSpeed < 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
+                self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.__Function(xDiffLeftWall) if onCeilingRamp\
+                                    else self.yPlace
+            elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - FLOOR_HEIGHT if onCeilingRamp else 0
+                self.xPlace = LEFT_WALL + DISTANCE_FROM__WALL - self.__FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnRamp = True
                 self.__GetObjectAngleOnSides(xDiffLeftWall)
-        
-        
+
     # prevent the player from moving beyond walls
     def __ObjectBoundaries(self):
         self.ObjectOnGround = False  # we will assume the object is not on ground

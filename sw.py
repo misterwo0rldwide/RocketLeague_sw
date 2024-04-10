@@ -39,7 +39,7 @@ class Game:
 
         
         image = pygame.transform.rotate(image, newAngle)
-        return pygame.transform.flip(image, True, False) 
+        return pygame.transform.flip(image, False, False) 
             
 
     def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
