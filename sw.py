@@ -131,7 +131,7 @@ class Player():
         self.PlayerObject = physics.Object(100, 75, 100, (self.player_rect.x, self.player_rect.y))
 
         self.accelrationX = 0
-        self.accelrationY = self.PlayerObject.GRAVITY_FORCE_ACCELARATION
+        self.IsJumping = False
     
     #set players image
     def SetPlayers(self):
@@ -166,24 +166,17 @@ class Player():
             pass
         if keys[pygame.K_DOWN]:
             pass
-        if keys[pygame.K_SPACE] and (self.PlayerObject.ObjectOnGround or self.PlayerObject.ObjectOnRamp):
-            self.accelrationY = -50
+        if keys[pygame.K_SPACE] and self.PlayerObject.ObjectOnGround:
+            self.IsJumping = True
 
 
     def PlayerMotion(self):
         
         self.KeyboardMotion()
-        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY)
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.IsJumping)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
-        self.accelrationX,self.accelrationY = 0,1
-
-
-
-
-
-
-
+        self.accelrationX,self.IsJumping = 0,False
             
         
 

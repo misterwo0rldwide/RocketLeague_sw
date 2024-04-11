@@ -28,7 +28,6 @@ class Object:
 
         self.angle = 0
         self.ObjectOnGround = True
-        self.ObjectOnRamp = False
 
         self.ACCELARATION_CAR = 10 * self.weight
 
@@ -51,43 +50,42 @@ class Object:
         self.angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
         self.angle = int(self.angle)
 
-    #the player need to adjust its angle
+    #the object needs to adjust its angle
     def __ObjectOnRamps(self):
-        self.ObjectOnRamp = False
 
         #check if right wall
         if RIGHT_WALL - self.xPlace < DISTANCE_FROM__WALL:  # right wall
             xDiffRightWall = DISTANCE_FROM__WALL - (RIGHT_WALL - self.xPlace)
-            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffRightWall)
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffRightWall)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT <= self.__Function(xDiffRightWall) and self.xPlace != RIGHT_WALL
 
             if self.xSpeed > 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
                 self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffRightWall) if onFloorRamp\
                                     else CEILING_HEIGHT + self.__Function(xDiffRightWall) if onCeilingRamp\
                                     else self.yPlace
             elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
-                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - FLOOR_HEIGHT if onCeilingRamp else 0
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
                 self.xPlace = RIGHT_WALL - DISTANCE_FROM__WALL + self.__FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
-                self.ObjectOnRamp = True
+                self.ObjectOnGround = True
                 self.__GetObjectAngleOnSides(xDiffRightWall)
         
         elif self.xPlace - LEFT_WALL < DISTANCE_FROM__WALL:  # left wall
             xDiffLeftWall = DISTANCE_FROM__WALL - (self.xPlace - LEFT_WALL)
-            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall)
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall) and self.xPlace != LEFT_WALL
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall) and self.xPlace != LEFT_WALL
             
             if self.xSpeed < 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
                 self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if onFloorRamp\
                                     else CEILING_HEIGHT + self.__Function(xDiffLeftWall) if onCeilingRamp\
                                     else self.yPlace
             elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
-                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - FLOOR_HEIGHT if onCeilingRamp else 0
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
                 self.xPlace = LEFT_WALL + DISTANCE_FROM__WALL - self.__FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
-                self.ObjectOnRamp = True
+                self.ObjectOnGround = True
                 self.__GetObjectAngleOnSides(xDiffLeftWall)
 
     # prevent the player from moving beyond walls
@@ -102,6 +100,7 @@ class Object:
             self.xPlace = RIGHT_WALL
             self.xSpeed = 0
             self.ObjectOnGround = True
+            self.angle = 90
         if self.yPlace >= FLOOR_HEIGHT:
             self.yPlace = FLOOR_HEIGHT
             self.ySpeed = 0
@@ -122,13 +121,24 @@ class Object:
                 
             self.xVector += Fk  # multiply by which direction the car is facing
 
+    # when jumping the player needs to sum the vectors in the right angle
+    def __CalculateVectors(self):
+        yPower = self.GRAVITY_FORCE_ACCELARATION * -50  # when jumping the force on the player needs to be big
+        xPower = self.xVector
 
-
+        totalVector = math.sqrt(xPower ** 2 + yPower ** 2)
+        self.xVector = totalVector * math.cos(math.radians(self.angle+90))
+        self.yVector = totalVector * -math.sin(math.radians(self.angle+90))
 
     #this function will calculate where the players need to be according to the vectors
-    def CalculateObjectPlace(self, accerlerationX, accerlerationY):
+    def CalculateObjectPlace(self, accerlerationX, IsJumping):
         self.xVector = accerlerationX * self.ACCELARATION_CAR
-        self.yVector = accerlerationY * self.GRAVITY_FORCE_ACCELARATION
+
+        if IsJumping:
+            self.__CalculateVectors()
+            self.ObjectOnGround = False
+        else:
+            self.yVector = self.GRAVITY_FORCE_ACCELARATION
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
@@ -147,7 +157,6 @@ class Object:
         # if xSpeed is close to zero we will set it to be zero
         self.xSpeed = 0 if abs(self.xSpeed) - 2 <= 0 else self.xSpeed
 
-        
         # now lets put it into the current place
 
         xDiff = self.xSpeed*REFRESH_RATE_TIME + (self.xVector / 2) * REFRESH_RATE_TIME ** 2
@@ -159,8 +168,6 @@ class Object:
 
         self.__ObjectBoundaries()
         self.__ObjectOnRamps()
-
-
 
 
 
