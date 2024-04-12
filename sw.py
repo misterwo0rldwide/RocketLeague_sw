@@ -34,12 +34,10 @@ class Game:
 
     def ChangePlayerPictureWithAngle(self, image):
         newAngle = self.players.PlayerObject.angle
-        #flipX = self.players.PlayerObject.flipX
-
-
+        flipX = self.players.PlayerObject.flipObjectDraw
         
         image = pygame.transform.rotate(image, newAngle)
-        return pygame.transform.flip(image, False, False) 
+        return pygame.transform.flip(image, flipX, False) 
             
 
     def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
@@ -131,6 +129,7 @@ class Player():
         self.PlayerObject = physics.Object(100, 75, 100, (self.player_rect.x, self.player_rect.y))
 
         self.accelrationX = 0
+        self.accelrationY = 1
         self.IsJumping = False
     
     #set players image
@@ -157,26 +156,28 @@ class Player():
             self.accelrationX, self.accelrationY = self.joystick.get_axis(0),  self.joystick.get_axis(1)
        
     def KeyboardMotion(self):
-        keys = pygame.key.get_pressed()
-        if keys[pygame.K_LEFT]:
+        keys = pygame.key.get_pressed()  # get the keys which are pressed
+
+        onGround = self.PlayerObject.ObjectOnGround  # if the player is on one of the ground - meaning any ground, floor ceiling and walls
+        onWalls = self.PlayerObject.xPlace == physics.RIGHT_WALL or self.PlayerObject.xPlace == physics.LEFT_WALL  # specificly if the player is on the walls
+        
+        if keys[pygame.K_LEFT] and onGround:
             self.accelrationX = -1
-        if keys[pygame.K_RIGHT]:
+        if keys[pygame.K_RIGHT] and onGround:
             self.accelrationX = 1
-        if keys[pygame.K_UP]:
-            pass
-        if keys[pygame.K_DOWN]:
-            pass
-        if keys[pygame.K_SPACE] and self.PlayerObject.ObjectOnGround:
+        if keys[pygame.K_UP] and onWalls:
+            self.accelrationY = -1
+        if keys[pygame.K_SPACE] and onGround:
             self.IsJumping = True
 
 
     def PlayerMotion(self):
         
         self.KeyboardMotion()
-        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.IsJumping)
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
-        self.accelrationX,self.IsJumping = 0,False
+        self.accelrationX,self.accelrationY, self.IsJumping = 0,1,False
             
         
 

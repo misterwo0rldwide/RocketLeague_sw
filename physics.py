@@ -34,6 +34,10 @@ class Object:
         self.MAX_SPEED_X = 3 * self.weight
         self.MAX_SPEED_Y = 2.5 * self.weight
 
+        # because we cant draw the object to all of his sides due to many of his angles we will need to rotate it
+        # from time to time, so for the main code we will have this variable which indicate if we need to flip the object
+        self.flipObjectDraw = False
+
     def __Function(self, x):
         return (x**2) / 100
     
@@ -47,17 +51,50 @@ class Object:
     def __GetObjectAngleOnSides(self, xDiff):
         # we will get the angle of the player with incline of the function
         incline = self.__DerivativeFunction(xDiff)
-        self.angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
-        self.angle = int(self.angle)
+        angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
+        return int(angle)
+
+
+    def __CalculateAnglesWallRamps(self, rightWall:bool ,xDiff:int, onFloorRamp:bool):
+        normalWallAngle = self.__GetObjectAngleOnSides(xDiff)
+        if rightWall:  # if on right wall ramps
+            if self.ySpeed <= 0 and onFloorRamp:
+                self.angle = normalWallAngle
+                self.flipObjectDraw = False
+            elif self.ySpeed > 0 and onFloorRamp:
+                self.angle = -normalWallAngle
+                self.flipObjectDraw = True
+            elif self.ySpeed < 0:  # on ceiling ramp
+                self.angle = 180 - normalWallAngle
+                self.flipObjectDraw = False
+            else:
+                self.angle = 180 + normalWallAngle
+                self.flipObjectDraw = True
+        else:         
+            if self.ySpeed <= 0 and onFloorRamp:
+                self.angle = normalWallAngle
+                self.flipObjectDraw = True
+            elif self.ySpeed > 0 and onFloorRamp:
+                self.angle = 360 - normalWallAngle
+                self.flipObjectDraw = False
+            elif self.ySpeed < 0:  # on ceiling ramp
+                self.angle = 180 - normalWallAngle
+                self.flipObjectDraw = True
+            else:
+                self.angle = 180 + normalWallAngle
+                self.flipObjectDraw = False
 
     #the object needs to adjust its angle
     def __ObjectOnRamps(self):
+
+        self.__ObjectBoundaries()  # firstly we will check the state of the object
+
 
         #check if right wall
         if RIGHT_WALL - self.xPlace < DISTANCE_FROM__WALL:  # right wall
             xDiffRightWall = DISTANCE_FROM__WALL - (RIGHT_WALL - self.xPlace)
             onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed > 0)
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT <= self.__Function(xDiffRightWall) and self.xPlace != RIGHT_WALL
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT <= self.__Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed < 0)
 
             if self.xSpeed > 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
                 self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffRightWall) if onFloorRamp\
@@ -69,12 +106,12 @@ class Object:
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnGround = True
-                self.__GetObjectAngleOnSides(xDiffRightWall)
+                self.__CalculateAnglesWallRamps(True ,xDiffRightWall, onFloorRamp)
         
         elif self.xPlace - LEFT_WALL < DISTANCE_FROM__WALL:  # left wall
             xDiffLeftWall = DISTANCE_FROM__WALL - (self.xPlace - LEFT_WALL)
-            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall) and self.xPlace != LEFT_WALL
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall) and self.xPlace != LEFT_WALL
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed < 0)
             
             if self.xSpeed < 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
                 self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if onFloorRamp\
@@ -86,7 +123,7 @@ class Object:
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnGround = True
-                self.__GetObjectAngleOnSides(xDiffLeftWall)
+                self.__CalculateAnglesWallRamps(False ,xDiffLeftWall, onFloorRamp)
 
     # prevent the player from moving beyond walls
     def __ObjectBoundaries(self):
@@ -96,20 +133,34 @@ class Object:
             self.xPlace = LEFT_WALL
             self.xSpeed = 0
             self.ObjectOnGround = True
+            if self.ySpeed <= 0:
+                self.angle = 90
+                self.flipObjectDraw = True
+            else:
+                self.angle = 270
+                self.flipObjectDraw = False
         elif self.xPlace >= RIGHT_WALL:
             self.xPlace = RIGHT_WALL
             self.xSpeed = 0
             self.ObjectOnGround = True
-            self.angle = 90
+            if self.ySpeed <= 0:
+                self.angle = 90
+                self.flipObjectDraw = False
+            else:
+                self.angle = 270
+                self.flipObjectDraw = True
         if self.yPlace >= FLOOR_HEIGHT:
             self.yPlace = FLOOR_HEIGHT
             self.ySpeed = 0
             self.angle = 0
             self.ObjectOnGround = True
+            self.flipObjectDraw = False if self.xSpeed >= 0 else True
         elif self.yPlace <= CEILING_HEIGHT:
             self.yPlace = CEILING_HEIGHT
             self.ySpeed = 0
             self.ObjectOnGround = True
+            self.angle = 180
+            self.flipObjectDraw = True if self.xSpeed >= 0 else False
 
 
 
@@ -126,19 +177,22 @@ class Object:
         yPower = self.GRAVITY_FORCE_ACCELARATION * -50  # when jumping the force on the player needs to be big
         xPower = self.xVector
 
+        angle = self.angle
+        angle = angle + 90 if not self.flipObjectDraw else 90 - angle
+
         totalVector = math.sqrt(xPower ** 2 + yPower ** 2)
-        self.xVector = totalVector * math.cos(math.radians(self.angle+90))
-        self.yVector = totalVector * -math.sin(math.radians(self.angle+90))
+        self.xVector = totalVector * math.cos(math.radians(angle))
+        self.yVector = totalVector * -math.sin(math.radians(angle))
 
     #this function will calculate where the players need to be according to the vectors
-    def CalculateObjectPlace(self, accerlerationX, IsJumping):
+    def CalculateObjectPlace(self, accerlerationX: int, accelrationY: int ,IsJumping: bool):
         self.xVector = accerlerationX * self.ACCELARATION_CAR
 
         if IsJumping:
             self.__CalculateVectors()
             self.ObjectOnGround = False
         else:
-            self.yVector = self.GRAVITY_FORCE_ACCELARATION
+            self.yVector = self.GRAVITY_FORCE_ACCELARATION * accelrationY
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
@@ -162,12 +216,18 @@ class Object:
         xDiff = self.xSpeed*REFRESH_RATE_TIME + (self.xVector / 2) * REFRESH_RATE_TIME ** 2
         yDiff = self.ySpeed*REFRESH_RATE_TIME + (self.yVector / 2) * REFRESH_RATE_TIME ** 2
 
+        # before moving we will save the current place so that after moving we will have the correct speed
+        yplace = self.yPlace
+        xplace = self.xPlace
+
         self.xPlace = self.xPlace + xDiff
         self.yPlace = self.yPlace + yDiff
 
-
-        self.__ObjectBoundaries()
         self.__ObjectOnRamps()
+
+        # calculating the real speed of the object
+        self.ySpeed = (self.yPlace - yplace) / REFRESH_RATE_TIME
+        self.xSpeed = (self.xPlace - xplace) / REFRESH_RATE_TIME
 
 
 
