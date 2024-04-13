@@ -1,15 +1,21 @@
 import pygame
 import sys
 from pygame.locals import *
-import math
 import physics
 
-WIDTH_SCREEN_VIEW = 1500
-HEIGHT_SCREEN_VIEW = 800
+
+RIGHT_WALL_BACKGROUND = 2497
+FLOOR_BACKGOURND = 1057
+
+GREEN = (0, 255, 0)
 
 # Initialize Pygame
 pygame.init()
-SCREEN = pygame.display.set_mode((WIDTH_SCREEN_VIEW, HEIGHT_SCREEN_VIEW))
+infoScreen = pygame.display.Info()
+width = infoScreen.current_w if infoScreen.current_w < RIGHT_WALL_BACKGROUND else RIGHT_WALL_BACKGROUND
+height = infoScreen.current_h if infoScreen.current_h < FLOOR_BACKGOURND else FLOOR_BACKGOURND
+SCREEN = pygame.display.set_mode((width, height))
+
 
 class Server:
     pass
@@ -25,7 +31,9 @@ class Game:
     def __init__(self, players):
 
         self.players = players
-        self.screen = SCREEN
+        self.width = self.players.width
+        self.height = self.players.height
+        self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         pygame.display.set_caption("Rocket League")
 
         # Load the background image
@@ -40,35 +48,30 @@ class Game:
         return pygame.transform.flip(image, flipX, False) 
             
 
-    def CorrectCameraView(self):  # we need to correct the camera view so it won't go out of the screen
+    def CorrectCameraView(self):
+        bg_x = -self.players.player_rect.x + self.width // 2
+        bg_y = -self.players.player_rect.y + self.height // 2
 
-        bg_x = WIDTH_SCREEN_VIEW // 2 - self.players.player_rect.centerx
-        bg_y = HEIGHT_SCREEN_VIEW // 2 - self.players.player_rect.centery
-
-        if bg_x >= 0:  # if the player is right to the left barrier, bg_x will be minus
-            bg_x = 0  # dont let it go over the limit
-        elif bg_x <= -995:  # right wall
-            bg_x = -995 
-        if bg_y >= 0:  # ceiling height
-            bg_y = 0
-        elif bg_y <= -260:  # floor height
-            bg_y = -260
+        bg_x = 0 if bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -bg_x >= RIGHT_WALL_BACKGROUND - self.width else bg_x
+        bg_y = 0 if bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -bg_y >= FLOOR_BACKGOURND - self.height else bg_y
         
         return bg_x, bg_y
     
-    def CorrectPlayerPlace(self, bg_x, bg_y):  # when the map is on the sides we need to fix the player place so it will be in the right place
+    def CorrectPlayerPlace(self, bg_x, bg_y):
         xDiff = 0
         yDiff = 0
-        if bg_x == 0:
-            xDiff = -((bg_x - self.players.player_rect.x) % 725)  # - because we add the xdiff
-        elif bg_x == -995:
-            xDiff = self.players.player_rect.x - 1725
-        if bg_y == -260:
-            yDiff = 200 - abs(self.players.player_rect.y - 850)  # the floor is 850 so if the player is on the floor 
-        elif bg_y == 0:
-            yDiff = self.players.player_rect.y - 388
 
-        return xDiff,yDiff
+        if bg_x == 0:
+            xDiff = -((bg_x - self.players.player_rect.x) % (self.width // 2))
+        elif bg_x == -(RIGHT_WALL_BACKGROUND - self.width):
+            xDiff = -(-bg_x + self.width // 2 - self.players.player_rect.x)
+
+        if bg_y == 0:
+            yDiff = self.players.player_rect.y - (self.height // 2)
+        elif bg_y == -(FLOOR_BACKGOURND - self.height):
+            yDiff = -(-bg_y + self.height // 2 - self.players.player_rect.y)
+
+        return xDiff, yDiff
     
     def ZoomOnPlayerImage(self):  # returned the player image after zooming on it
         zoom_level = 1.5  # Change this value to adjust zoom level
@@ -85,18 +88,18 @@ class Game:
             
             #for player in self.players:
             self.players.PlayerMotion()
+            self.width, self.height = self.players.width, self.players.height
 
             bg_x, bg_y = self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
             zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
             
             xDiff, yDiff = self.CorrectPlayerPlace(bg_x, bg_y)  #  move the player to be on the right place on screen
-            zoomed_player_rect = zoomed_player_image.get_rect(center=(WIDTH_SCREEN_VIEW // 2 + xDiff, HEIGHT_SCREEN_VIEW // 2 + yDiff))
+            zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
 
             # Draw everything
             self.screen.blit(self.background_image, (bg_x, bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
-
 
             # Update the display
             pygame.display.update()
@@ -107,7 +110,10 @@ class Game:
 
 
 class Player():
-    def __init__(self):
+    def __init__(self, width, height):
+
+        self.width = width
+        self.height = height
 
         pygame.joystick.init()
         self.joystick = 0
@@ -126,6 +132,7 @@ class Player():
         self.IsJumping = False
         self.IsDoubleJumping = False
         self.PlayerTouchedControlrs = False
+        self.IsBoosting = False
     
     #set players image
     def SetPlayers(self):
@@ -145,12 +152,23 @@ class Player():
 
         # Handle events
         for event in pygame.event.get():
-            if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or event.type == JOYBUTTONDOWN:  # because space key cannot be held down we need it as an event
+            if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or (event.type == JOYBUTTONDOWN and event.button == 0):  # because space key cannot be held down we need it as an event
                 self.JumpingAction()
             if event.type == JOYDEVICEADDED:  # if the device was diconnected
                 self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
             if event.type == JOYDEVICEREMOVED:
                 self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+
+            
+            # if game was resized
+            if event.type == pygame.WINDOWRESIZED:
+                self.width, self.height = pygame.display.get_surface().get_size()
+
+
+        # because the player usually presses the boost and not tapping it will not be as an event so we need to check it manually
+        if self.joystick != 0 and self.joystick.get_button(1):
+            self.IsBoosting = True
+
         
         if self.joystick != 0:  # if joystick exist
             self.accelrationX = self.joystick.get_axis(0) # right and left
@@ -175,6 +193,8 @@ class Player():
             self.accelrationY = -1
             self.PlayerTouchedControlrs = True
         # because going down is just as only gravity working we dont need to check if player going down
+        if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
+            self.IsBoosting = True
 
     def JumpingAction(self):
         if self.PlayerObject.ObjectOnGround:
@@ -191,15 +211,16 @@ class Player():
 
         #print(self.accelrationX, self.accelrationY)
 
-        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping, self.PlayerTouchedControlrs)
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping, self.PlayerTouchedControlrs, self.IsBoosting)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
-        self.accelrationX,self.accelrationY, self.IsJumping = 0,1,False
+        self.accelrationX,self.accelrationY, self.IsJumping, self.IsBoosting = 0,1,False, False
             
         
 
 
-player = Player()
+width, height = SCREEN.get_size()
+player = Player(width, height)
 game = Game(player)
 game.MainLoop()
 

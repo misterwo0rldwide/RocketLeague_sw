@@ -35,6 +35,11 @@ class Object:
         # from time to time, so for the main code we will have this variable which indicate if we need to flip the object
         self.flipObjectDraw = False
 
+        self.spinning = False
+        self.startingAngle = 0
+
+        self.boostAmount = 100
+
     def __Function(self, x):
         return (x**2) / 100
     
@@ -144,6 +149,7 @@ class Object:
             self.xPlace = LEFT_WALL
             self.xSpeed = 0
             self.ObjectOnGround = True
+            self.spinning = False
             if self.ySpeed <= 0:
                 self.angle = 90
                 self.flipObjectDraw = True
@@ -154,6 +160,7 @@ class Object:
             self.xPlace = RIGHT_WALL
             self.xSpeed = 0
             self.ObjectOnGround = True
+            self.spinning = False
             if self.ySpeed <= 0:
                 self.angle = 90
                 self.flipObjectDraw = False
@@ -166,12 +173,14 @@ class Object:
             self.angle = 0
             self.ObjectOnGround = True
             self.flipObjectDraw = False if self.xSpeed >= 0 else True
+            self.spinning = False
         elif self.yPlace <= CEILING_HEIGHT:
             self.yPlace = CEILING_HEIGHT
             self.ySpeed = 0
             self.ObjectOnGround = True
             self.angle = 180
             self.flipObjectDraw = True if self.xSpeed >= 0 else False
+            self.spinning = False
 
 
 
@@ -183,38 +192,73 @@ class Object:
                 
             self.xVector += Fk  # multiply by which direction the car is facing
 
-    def __CalculateMaxSpeed(self):
+    def __CalculateMaxSpeed(self, IsBoosting):
 
         MAX_SPEED_X = 3 * self.weight
         MAX_SPEED_Y = 2.5 * self.weight
 
-        if not self.ObjectOnGround:
-            MAX_SPEED_X *= 1.5
-            MAX_SPEED_Y *= 1.5
+        if not self.ObjectOnGround or IsBoosting:
+            MAX_SPEED_X *= 1.4
+            MAX_SPEED_Y *= 1.2
 
         self.xSpeed = MAX_SPEED_X if self.xSpeed > MAX_SPEED_X else -MAX_SPEED_X if self.xSpeed < -MAX_SPEED_X else self.xSpeed
         self.ySpeed = MAX_SPEED_Y * 2 if self.ySpeed > MAX_SPEED_Y * 2 else -MAX_SPEED_Y * 2 if self.ySpeed < -MAX_SPEED_Y * 2 else self.ySpeed
 
     # when jumping the player needs to sum the vectors in the right angle
-    def __CalculateVectorsJump(self):
+    def __CalculateVectorsJump(self, PlayerTouchedControls):
         yPower = self.GRAVITY_FORCE_ACCELARATION * -20  # when jumping the force on the player needs to be big
         xPower = self.xVector
 
-        angle = self.angle
-        angle = angle + 90 if not self.flipObjectDraw else 90 - angle
+        mul = 1
 
+        angle = self.angle
+        if self.ObjectOnGround or not PlayerTouchedControls:
+            angle = angle + 90 if not self.flipObjectDraw else 90 - angle
+        else:
+            mul = -1 if self.flipObjectDraw else mul
+            self.spinning = True
+            self.startingAngle = angle
+        
         totalVector = math.sqrt(xPower ** 2 + yPower ** 2)
-        self.xVector = totalVector * math.cos(math.radians(angle))
+        self.xVector = totalVector * math.cos(math.radians(angle)) * mul
         self.yVector = totalVector * -math.sin(math.radians(angle))
 
+    # when the player is in the air he can be either moving itself the angle or in spinning mid air
+    def __AdjustAngle(self, PlayerTouchedControls, acelerationX, accelerationY):
+        if not self.ObjectOnGround and PlayerTouchedControls and not self.spinning:
+            self.__GetObjectAngleInAir(acelerationX, accelerationY)
+        elif self.spinning:
+            self.angle = (self.angle - 15) % 360  # jumps of 15 angles
+            if abs(self.startingAngle - self.angle) < 10:
+                self.spinning = False
+                self.angle = self.startingAngle
+
+
+    def __PlayerBoosting(self):
+        if self.boostAmount > 0:
+            # firstly we will calculate the totalVector of the boost
+
+            totalVector = math.sqrt(self.xVector ** 2 + self.yVector ** 2) * 0.8
+
+            angle = self.angle
+            if self.flipObjectDraw:
+                angle = 180 - angle
+
+            # now we will add the right proportion to each axis
+            self.xVector += totalVector * math.cos(math.radians(angle)) * self.weight / 45
+            self.yVector -= totalVector * math.sin(math.radians(angle)) * self.weight / 60
+
+            self.boostAmount -= 1
+
+
     #this function will calculate where the players need to be according to the vectors
-    def CalculateObjectPlace(self, accelerationX: int, accelerationY: int ,IsJumping: bool, PlayerTouchedControls: bool):
+    def CalculateObjectPlace(self, accelerationX: int, accelerationY: int ,IsJumping: bool, PlayerTouchedControls: bool, IsBoosting: bool):
 
         saveAccelerationX, saveAccelerationY = accelerationX, accelerationY
         self.xVector = accelerationX * self.ACCELARATION_CAR
 
         if IsJumping:
-            self.__CalculateVectorsJump()
+            self.__CalculateVectorsJump(PlayerTouchedControls)
             self.ObjectOnGround = False
         else:
             if not self.ObjectOnGround:
@@ -226,7 +270,10 @@ class Object:
             self.xVector = accelerationX * self.ACCELARATION_CAR
             self.yVector = accelerationY * self.GRAVITY_FORCE_ACCELARATION
 
-        
+        if IsBoosting:
+            self.__PlayerBoosting()
+        else:
+            self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
@@ -240,7 +287,7 @@ class Object:
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
 
 
-        self.__CalculateMaxSpeed()
+        self.__CalculateMaxSpeed(IsBoosting)
 
         # if xSpeed is close to zero we will set it to be zero
         self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed
@@ -263,8 +310,7 @@ class Object:
         self.ySpeed = (self.yPlace - yplace) / REFRESH_RATE_TIME
         self.xSpeed = (self.xPlace - xplace) / REFRESH_RATE_TIME
 
-        if not self.ObjectOnGround and PlayerTouchedControls:
-            self.__GetObjectAngleInAir(saveAccelerationX, saveAccelerationY)
+        self.__AdjustAngle(PlayerTouchedControls, saveAccelerationX, saveAccelerationY)
 
 
 
