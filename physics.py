@@ -31,9 +31,6 @@ class Object:
 
         self.ACCELARATION_CAR = 10 * self.weight
 
-        self.MAX_SPEED_X = 3 * self.weight
-        self.MAX_SPEED_Y = 2.5 * self.weight
-
         # because we cant draw the object to all of his sides due to many of his angles we will need to rotate it
         # from time to time, so for the main code we will have this variable which indicate if we need to flip the object
         self.flipObjectDraw = False
@@ -53,6 +50,20 @@ class Object:
         incline = self.__DerivativeFunction(xDiff)
         angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
         return int(angle)
+    
+    # when the player is in the air he needs to rotate
+    def __GetObjectAngleInAir(self, accelrationX, accelrationY):
+        #we will calculate the angle of the car with the acceleration which the player is doing
+        # basically we will do pythagoras to get the totla vector
+        # then we will get the angle between the totla vector and x axis
+        self.angle = math.degrees(math.acos(accelrationX / math.sqrt(accelrationX ** 2 + accelrationY ** 2))) * -(accelrationY / abs(accelrationY))
+
+        # now if the player is going backwards we will flip his drawing
+        if self.xSpeed < 0:
+            self.flipObjectDraw = True
+            self.angle = self.angle * -1 + 180
+        else:
+            self.flipObjectDraw = False
 
 
     def __CalculateAnglesWallRamps(self, rightWall:bool ,xDiff:int, onFloorRamp:bool):
@@ -172,9 +183,21 @@ class Object:
                 
             self.xVector += Fk  # multiply by which direction the car is facing
 
+    def __CalculateMaxSpeed(self):
+
+        MAX_SPEED_X = 3 * self.weight
+        MAX_SPEED_Y = 2.5 * self.weight
+
+        if not self.ObjectOnGround:
+            MAX_SPEED_X *= 1.5
+            MAX_SPEED_Y *= 1.5
+
+        self.xSpeed = MAX_SPEED_X if self.xSpeed > MAX_SPEED_X else -MAX_SPEED_X if self.xSpeed < -MAX_SPEED_X else self.xSpeed
+        self.ySpeed = MAX_SPEED_Y * 2 if self.ySpeed > MAX_SPEED_Y * 2 else -MAX_SPEED_Y * 2 if self.ySpeed < -MAX_SPEED_Y * 2 else self.ySpeed
+
     # when jumping the player needs to sum the vectors in the right angle
-    def __CalculateVectors(self):
-        yPower = self.GRAVITY_FORCE_ACCELARATION * -50  # when jumping the force on the player needs to be big
+    def __CalculateVectorsJump(self):
+        yPower = self.GRAVITY_FORCE_ACCELARATION * -20  # when jumping the force on the player needs to be big
         xPower = self.xVector
 
         angle = self.angle
@@ -185,14 +208,25 @@ class Object:
         self.yVector = totalVector * -math.sin(math.radians(angle))
 
     #this function will calculate where the players need to be according to the vectors
-    def CalculateObjectPlace(self, accerlerationX: int, accelrationY: int ,IsJumping: bool):
-        self.xVector = accerlerationX * self.ACCELARATION_CAR
+    def CalculateObjectPlace(self, accelerationX: int, accelerationY: int ,IsJumping: bool, PlayerTouchedControls: bool):
+
+        saveAccelerationX, saveAccelerationY = accelerationX, accelerationY
+        self.xVector = accelerationX * self.ACCELARATION_CAR
 
         if IsJumping:
-            self.__CalculateVectors()
+            self.__CalculateVectorsJump()
             self.ObjectOnGround = False
         else:
-            self.yVector = self.GRAVITY_FORCE_ACCELARATION * accelrationY
+            if not self.ObjectOnGround:
+                accelerationY = 1
+                accelerationX = 0
+            elif not (self.xPlace == RIGHT_WALL or self.xPlace == LEFT_WALL):  # not on walls
+                accelerationY = 1
+            
+            self.xVector = accelerationX * self.ACCELARATION_CAR
+            self.yVector = accelerationY * self.GRAVITY_FORCE_ACCELARATION
+
+        
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
@@ -205,11 +239,11 @@ class Object:
         self.xSpeed = self.xSpeed + self.xVector * REFRESH_RATE_TIME
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
 
-        self.xSpeed = self.MAX_SPEED_X if self.xSpeed > self.MAX_SPEED_X else -self.MAX_SPEED_X if self.xSpeed < -self.MAX_SPEED_X else self.xSpeed
-        self.ySpeed = self.MAX_SPEED_Y * 2 if self.ySpeed > self.MAX_SPEED_Y * 2 else -self.MAX_SPEED_Y * 2 if self.ySpeed < -self.MAX_SPEED_Y * 2 else self.ySpeed
+
+        self.__CalculateMaxSpeed()
 
         # if xSpeed is close to zero we will set it to be zero
-        self.xSpeed = 0 if abs(self.xSpeed) - 2 <= 0 else self.xSpeed
+        self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed
 
         # now lets put it into the current place
 
@@ -228,6 +262,9 @@ class Object:
         # calculating the real speed of the object
         self.ySpeed = (self.yPlace - yplace) / REFRESH_RATE_TIME
         self.xSpeed = (self.xPlace - xplace) / REFRESH_RATE_TIME
+
+        if not self.ObjectOnGround and PlayerTouchedControls:
+            self.__GetObjectAngleInAir(saveAccelerationX, saveAccelerationY)
 
 
 

@@ -81,12 +81,6 @@ class Game:
     def MainLoop(self):
         running = True
         while running:
-            # Handle events
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                self.players.ControllerMovement(event)
-            
             
             
             #for player in self.players:
@@ -116,10 +110,9 @@ class Player():
     def __init__(self):
 
         pygame.joystick.init()
+        self.joystick = 0
         if pygame.joystick.get_count() > 0:
-
             self.joystick = pygame.joystick.Joystick(0)
-            self.joystick.init()
 
 
         self.joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]  # set controller movement
@@ -131,6 +124,8 @@ class Player():
         self.accelrationX = 0
         self.accelrationY = 1
         self.IsJumping = False
+        self.IsDoubleJumping = False
+        self.PlayerTouchedControlrs = False
     
     #set players image
     def SetPlayers(self):
@@ -141,40 +136,62 @@ class Player():
         self.player_rect.x = 500
         self.player_rect.y = 850
 
-    #controls of the game - controller and keyboard
-    def ControllerMovement(self, event):
-        if pygame.joystick.get_count() > 0:
+    def HandleEvents(self):
+
+        self.PlayerTouchedControlrs = False
+
+        if self.PlayerObject.ObjectOnGround:
+            self.IsDoubleJumping = False
+
+        # Handle events
+        for event in pygame.event.get():
+            if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or event.type == JOYBUTTONDOWN:  # because space key cannot be held down we need it as an event
+                self.JumpingAction()
             if event.type == JOYDEVICEADDED:  # if the device was diconnected
                 self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
             if event.type == JOYDEVICEREMOVED:
                 self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
-            if event.type == JOYBUTTONDOWN:  # if button was pressed
-                if event.button == 1:  # if O button was pressed
-                    self.speed *= 2
-
-
-            self.accelrationX, self.accelrationY = self.joystick.get_axis(0),  self.joystick.get_axis(1)
+        
+        if self.joystick != 0:  # if joystick exist
+            self.accelrationX = self.joystick.get_axis(0) # right and left
+            self.accelrationY = self.joystick.get_axis(1) # up and down
+            self.accelrationX = 0 if abs(self.accelrationX) < 0.1 else self.accelrationX
+            self.accelrationY = 1 if abs(self.accelrationY) < 0.1 else self.accelrationY
+            self.PlayerTouchedControlrs = False if self.accelrationX == 0 and self.accelrationY == 1 else True
        
     def KeyboardMotion(self):
+
+        self.PlayerTouchedControlrs = False
+
         keys = pygame.key.get_pressed()  # get the keys which are pressed
-
-        onGround = self.PlayerObject.ObjectOnGround  # if the player is on one of the ground - meaning any ground, floor ceiling and walls
-        onWalls = self.PlayerObject.xPlace == physics.RIGHT_WALL or self.PlayerObject.xPlace == physics.LEFT_WALL  # specificly if the player is on the walls
         
-        if keys[pygame.K_LEFT] and onGround:
+        if keys[pygame.K_LEFT]:
             self.accelrationX = -1
-        if keys[pygame.K_RIGHT] and onGround:
+            self.PlayerTouchedControlrs = True
+        if keys[pygame.K_RIGHT]:
             self.accelrationX = 1
-        if keys[pygame.K_UP] and onWalls:
+            self.PlayerTouchedControlrs = True
+        if keys[pygame.K_UP]:
             self.accelrationY = -1
-        if keys[pygame.K_SPACE] and onGround:
-            self.IsJumping = True
+            self.PlayerTouchedControlrs = True
+        # because going down is just as only gravity working we dont need to check if player going down
 
+    def JumpingAction(self):
+        if self.PlayerObject.ObjectOnGround:
+            self.IsJumping = True
+        elif not self.PlayerObject.ObjectOnGround and not self.IsDoubleJumping:
+            self.IsJumping = True
+            self.IsDoubleJumping = True
 
     def PlayerMotion(self):
         
-        self.KeyboardMotion()
-        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping)
+        self.HandleEvents()
+        if not self.PlayerTouchedControlrs:
+            self.KeyboardMotion()
+
+        #print(self.accelrationX, self.accelrationY)
+
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping, self.PlayerTouchedControlrs)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
         self.accelrationX,self.accelrationY, self.IsJumping = 0,1,False
