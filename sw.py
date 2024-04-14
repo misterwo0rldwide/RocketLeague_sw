@@ -3,13 +3,23 @@ import sys
 from pygame.locals import *
 import physics
 import math
+from random import randint
+import time
 
 
 RIGHT_WALL_BACKGROUND = 2497
 FLOOR_BACKGOURND = 1057
+RIGHT_WALL_BG_X = 4647
+
 
 GREEN = (0, 255, 0)
 GRAY = (128,128,128)
+
+PLAYER_WIDTH = 50
+PLAYER_HEIGHT = 25
+
+BOOST_WIDTH = 8
+
 
 # Initialize Pygame
 pygame.init()
@@ -40,6 +50,11 @@ class Game:
 
         # Load the background image
         self.background_image = pygame.image.load("background.png").convert()
+
+        self.boostSprites = []
+
+        self.bg_x = 0
+        self.bg_y = 0
     
 
     def ChangePlayerPictureWithAngle(self, image):
@@ -51,27 +66,27 @@ class Game:
             
 
     def CorrectCameraView(self):
-        bg_x = -self.players.player_rect.x + self.width // 2
-        bg_y = -self.players.player_rect.y + self.height // 2
+        self.bg_x = -self.players.player_rect.x + self.width // 2
+        self.bg_y = -self.players.player_rect.y + self.height // 2
 
-        bg_x = 0 if bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -bg_x >= RIGHT_WALL_BACKGROUND - self.width else bg_x
-        bg_y = 0 if bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -bg_y >= FLOOR_BACKGOURND - self.height else bg_y
+        self.bg_x = 0 if self.bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -self.bg_x >= RIGHT_WALL_BACKGROUND - self.width else self.bg_x
+        self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
         
-        return bg_x, bg_y
+        return self.bg_x, self.bg_y
     
-    def CorrectPlayerPlace(self, bg_x, bg_y):
+    def CorrectPlayerPlace(self):
         xDiff = 0
         yDiff = 0
 
-        if bg_x == 0:
-            xDiff = -((bg_x - self.players.player_rect.x) % (self.width // 2))
-        elif bg_x == -(RIGHT_WALL_BACKGROUND - self.width):
-            xDiff = -(-bg_x + self.width // 2 - self.players.player_rect.x)
+        if self.bg_x == 0:
+            xDiff = -((self.bg_x - self.players.player_rect.x) % (self.width // 2))
+        elif self.bg_x == -(RIGHT_WALL_BACKGROUND - self.width):
+            xDiff = -(-self.bg_x + self.width // 2 - self.players.player_rect.x)
 
-        if bg_y == 0:
+        if self.bg_y == 0:
             yDiff = self.players.player_rect.y - (self.height // 2)
-        elif bg_y == -(FLOOR_BACKGOURND - self.height):
-            yDiff = -(-bg_y + self.height // 2 - self.players.player_rect.y)
+        elif self.bg_y == -(FLOOR_BACKGOURND - self.height):
+            yDiff = -(-self.bg_y + self.height // 2 - self.players.player_rect.y)
 
         return xDiff, yDiff
     
@@ -82,9 +97,9 @@ class Game:
         
         return zoomed_player_image
 
-    def DrawPlayerEssntials(self, xOfPlayerOnScreen, yOfPlayerOnScreen):
+    def DrawPlayerEssntials(self, xOfPlayerOnScreen, yOfPlayerOnScreen, isBoosting):
 
-        # draw boost
+        # draw boost amount
         amountOfBoost = (self.players.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
 
         boostX = xOfPlayerOnScreen - 50
@@ -101,6 +116,40 @@ class Game:
 
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
+        self.DrawBoost(isBoosting)
+    
+    
+    # when player is boosting we will print his boost
+    def DrawBoost(self,isBoosting):
+        # we will add to the list number of rects
+        if isBoosting and self.players.PlayerObject.boostAmount:
+            amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
+
+
+            angle = self.players.PlayerObject.angle if not self.players.PlayerObject.flipObjectDraw else 180 - self.players.PlayerObject.angle
+
+            rectX, rectY = self.players.player_rect.x, self.players.player_rect.y - randint(0,10) # we will start drawing the blocks from the middle of the object and down
+            rectX = rectX - 45 * math.cos(math.radians(angle))
+            rectY = rectY + 45 * math.sin(math.radians(angle))
+
+            self.boostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
+            self.boostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
+        
+        # now we will draw the boost
+        if len(self.boostSprites) > 0:
+            for index, boostRow in enumerate(self.boostSprites):
+                boostTime = time.time() - boostRow[0]
+                if boostTime > 0.5:  # kill the boost row
+                    del self.boostSprites[index]
+                else:
+                    rectX, rectY = boostRow[1][0], boostRow[1][1]
+                    if -self.bg_x + self.width > rectX > -self.bg_x and -self.bg_y + self.height > rectY > -self.bg_y:  # if on screen
+                        maxTimeR = 255/0.7
+                        maxTimeG = 165/0.7
+
+                        boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
+                        pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
+
 
 
 
@@ -110,21 +159,21 @@ class Game:
             
             
             #for player in self.players:
-            self.players.PlayerMotion()
+            isBoosting = self.players.PlayerMotion()
             self.width, self.height = self.players.width, self.players.height
 
-            bg_x, bg_y = self.CorrectCameraView()  # get the camera right place
+            self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
             zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
             
-            xDiff, yDiff = self.CorrectPlayerPlace(bg_x, bg_y)  #  move the player to be on the right place on screen
+            xDiff, yDiff = self.CorrectPlayerPlace()  #  move the player to be on the right place on screen
             zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
 
             # Draw everything
-            self.screen.blit(self.background_image, (bg_x, bg_y))
+            self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
 
-            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff)
+            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, isBoosting)
 
             # Update the display
             pygame.display.update()
@@ -163,7 +212,7 @@ class Player():
     
     #set players image
     def SetPlayers(self):
-        self.player_image = pygame.transform.scale(pygame.image.load("player.png"), (50,25))
+        self.player_image = pygame.transform.scale(pygame.image.load("player.png"), (PLAYER_WIDTH,PLAYER_HEIGHT))
         self.player_image.set_colorkey((0,0,0))
         self.player_image.convert_alpha()
         self.player_rect = self.player_image.get_rect()
@@ -182,9 +231,9 @@ class Player():
             if (event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE) or (event.type == JOYBUTTONDOWN and event.button == 0):  # because space key cannot be held down we need it as an event
                 self.JumpingAction()
             if event.type == JOYDEVICEADDED:  # if the device was diconnected
-                self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+                self.joystick = pygame.joystick.Joystick(0)
             if event.type == JOYDEVICEREMOVED:
-                self.joysticks = [pygame.joystick.Joystick(i) for i in range(pygame.joystick.get_count())]
+                self.joystick = 0
 
             
             # if game was resized
@@ -245,7 +294,10 @@ class Player():
         self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping, self.PlayerTouchedControlrs, self.IsBoosting)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
+        isPlayerBoosting = self.IsBoosting
         self.accelrationX,self.accelrationY, self.IsJumping, self.IsBoosting = 0,1,False, False
+
+        return isPlayerBoosting
             
         
 
