@@ -1,3 +1,4 @@
+#Rocket League SideSwipe Game - Omer Kfir Herzog יא'3
 import pygame
 import sys
 from pygame.locals import *
@@ -5,6 +6,9 @@ import physics
 import math
 from random import randint
 import time
+import socket
+import pickle
+import protocol
 
 
 RIGHT_WALL_BACKGROUND = 2497
@@ -20,6 +24,8 @@ PLAYER_HEIGHT = 25
 
 BOOST_WIDTH = 8
 
+BUFFER_LIMIT = 1024
+
 
 # Initialize Pygame
 pygame.init()
@@ -30,7 +36,32 @@ SCREEN = pygame.display.set_mode((width, height))
 
 
 class Server:
-    pass
+    SERVER_IP = '127.0.0.1'
+    SERVER_PORT = 1393
+
+    def __init__(self):
+        self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        msg = protocol.BuildMsgProtocol(protocol.PLAYER_CONNECTING, None)
+        print(msg)
+        self.playerSocket.sendto(msg, (self.SERVER_IP, self.SERVER_PORT))
+    
+    def RecvMsgBySizeUDP(self):
+        try:
+            data,_ = self.playerSocket.recvfrom(BUFFER_LIMIT)
+            length = int(data[:4].decode())
+            if length < len(data):
+                data = data[:length]
+            
+            return data
+        except Exception:
+            return None
+        
+
+    def GameHandling(self, playerObject: physics.Object):
+        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(playerObject)), (self.SERVER_IP, self.SERVER_PORT))
+        return self.RecvMsgBySizeUDP()
+
+
 
 
 class Game:
@@ -40,11 +71,14 @@ class Game:
     #Set Clock
     clock = pygame.time.Clock()
     
-    def __init__(self, players):
+    def __init__(self, player):
 
-        self.players = players
-        self.width = self.players.width
-        self.height = self.players.height
+        self.player = player
+        self.width = self.player.width
+        self.height = self.player.height
+
+        self.gameNetwork = Server()
+
         self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         pygame.display.set_caption("Rocket League")
 
@@ -58,16 +92,16 @@ class Game:
     
 
     def ChangePlayerPictureWithAngle(self, image):
-        newAngle = self.players.PlayerObject.angle
-        flipX = self.players.PlayerObject.flipObjectDraw
+        newAngle = self.player.PlayerObject.angle
+        flipX = self.player.PlayerObject.flipObjectDraw
         
         image = pygame.transform.rotate(image, newAngle)
         return pygame.transform.flip(image, flipX, False) 
             
 
     def CorrectCameraView(self):
-        self.bg_x = -self.players.player_rect.x + self.width // 2
-        self.bg_y = -self.players.player_rect.y + self.height // 2
+        self.bg_x = -self.player.player_rect.x + self.width // 2
+        self.bg_y = -self.player.player_rect.y + self.height // 2
 
         self.bg_x = 0 if self.bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -self.bg_x >= RIGHT_WALL_BACKGROUND - self.width else self.bg_x
         self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
@@ -79,28 +113,28 @@ class Game:
         yDiff = 0
 
         if self.bg_x == 0:
-            xDiff = -((self.bg_x - self.players.player_rect.x) % (self.width // 2))
+            xDiff = -((self.bg_x - self.player.player_rect.x) % (self.width // 2))
         elif self.bg_x == -(RIGHT_WALL_BACKGROUND - self.width):
-            xDiff = -(-self.bg_x + self.width // 2 - self.players.player_rect.x)
+            xDiff = -(-self.bg_x + self.width // 2 - self.player.player_rect.x)
 
         if self.bg_y == 0:
-            yDiff = self.players.player_rect.y - (self.height // 2)
+            yDiff = self.player.player_rect.y - (self.height // 2)
         elif self.bg_y == -(FLOOR_BACKGOURND - self.height):
-            yDiff = -(-self.bg_y + self.height // 2 - self.players.player_rect.y)
+            yDiff = -(-self.bg_y + self.height // 2 - self.player.player_rect.y)
 
         return xDiff, yDiff
     
     def ZoomOnPlayerImage(self):  # returned the player image after zooming on it
         zoom_level = 1.5  # Change this value to adjust zoom level
-        zoomed_player_image = pygame.transform.scale(self.players.player_image, (int(self.players.player_rect.width * zoom_level),
-                                                                    int(self.players.player_rect.height * zoom_level)))
+        zoomed_player_image = pygame.transform.scale(self.player.player_image, (int(self.player.player_rect.width * zoom_level),
+                                                                    int(self.player.player_rect.height * zoom_level)))
         
         return zoomed_player_image
 
     def DrawPlayerEssntials(self, xOfPlayerOnScreen, yOfPlayerOnScreen, isBoosting):
 
         # draw boost amount
-        amountOfBoost = (self.players.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
+        amountOfBoost = (self.player.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
 
         boostX = xOfPlayerOnScreen - 50
         boostY = yOfPlayerOnScreen - 50
@@ -112,7 +146,9 @@ class Game:
         jumpX = xOfPlayerOnScreen
         jumpY = yOfPlayerOnScreen - 70
         radius = 10
-        color = GREEN if not self.players.IsDoubleJumping else GRAY
+        color = GREEN if not self.player.IsDoubleJumping else GRAY
+
+
 
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
@@ -122,13 +158,13 @@ class Game:
     # when player is boosting we will print his boost
     def DrawBoost(self,isBoosting):
         # we will add to the list number of rects
-        if isBoosting and self.players.PlayerObject.boostAmount:
+        if isBoosting and self.player.PlayerObject.boostAmount:
             amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
 
 
-            angle = self.players.PlayerObject.angle if not self.players.PlayerObject.flipObjectDraw else 180 - self.players.PlayerObject.angle
+            angle = self.player.PlayerObject.angle if not self.player.PlayerObject.flipObjectDraw else 180 - self.player.PlayerObject.angle
 
-            rectX, rectY = self.players.player_rect.x, self.players.player_rect.y - randint(0,10) # we will start drawing the blocks from the middle of the object and down
+            rectX, rectY = self.player.player_rect.x, self.player.player_rect.y - randint(0,10) # we will start drawing the blocks from the middle of the object and down
             rectX = rectX - 45 * math.cos(math.radians(angle))
             rectY = rectY + 45 * math.sin(math.radians(angle))
 
@@ -159,8 +195,8 @@ class Game:
             
             
             #for player in self.players:
-            isBoosting = self.players.PlayerMotion()
-            self.width, self.height = self.players.width, self.players.height
+            isBoosting = self.player.PlayerMotion()
+            self.width, self.height = self.player.width, self.player.height
 
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
@@ -174,6 +210,10 @@ class Game:
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
 
             self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, isBoosting)
+
+            info = self.gameNetwork.RecvMsgBySizeUDP().split(b'~')
+            secondPlayer, ball = pickle.loads(info[0]), pickle.loads(info[1])
+
 
             # Update the display
             pygame.display.update()
@@ -199,7 +239,7 @@ class Player():
         
         self.SetPlayers()
 
-        self.PlayerObject = physics.Object(100, 75, 100, (self.player_rect.x, self.player_rect.y))
+        self.PlayerObject = physics.Object(PLAYER_WIDTH, PLAYER_HEIGHT, 100, (self.player_rect.x, self.player_rect.y))
 
         self.accelrationX = 0
         self.accelrationY = 1
@@ -298,14 +338,14 @@ class Player():
         self.accelrationX,self.accelrationY, self.IsJumping, self.IsBoosting = 0,1,False, False
 
         return isPlayerBoosting
-            
         
-
 
 width, height = SCREEN.get_size()
 player = Player(width, height)
 game = Game(player)
 game.MainLoop()
+
+
 
 pygame.quit()
 sys.exit()

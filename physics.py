@@ -1,3 +1,4 @@
+#Rocket League SideSwipe Game - Omer Kfir Herzog יא'3
 import math
 
 
@@ -16,7 +17,7 @@ MAX_BOOST = 100
 
 # a class for rectangle objects
 class Object:
-    def __init__(self, width: int, height: int, weight: int,statringPlace:tuple):
+    def __init__(self,width:int,height:int,weight: int,statringPlace:tuple):
         self.width = width
         self.height = height
         self.weight = weight
@@ -332,5 +333,33 @@ class Object:
 
 
 
+# we will also have ball physics, similar to object physics but with a few changes
 class Ball(Object):
-    pass
+    
+    def __init__(self, weight: int, startingPlace: tuple, radius:int):
+        Object.__init__(self, 0, 0, weight, startingPlace)
+        self.radius = radius
+
+    
+
+    def __BallRectCollision(self, rect : Object):
+        circleDistanceX = abs(self.xPlace - rect.xPlace)  # calculate distance from center to center
+        circleDistanceY = abs(self.yPlace - rect.yPlace)
+
+        if circleDistanceX > rect.width/2 + self.radius:
+            return False
+        if circleDistanceY > rect.height/2 + self.radius:
+            return False
+
+        if circleDistanceX <= rect.width/2:
+            return False
+        if circleDistanceY <= rect.height/2:
+            return False
+
+        cornerDistance_sq = math.sqrt((circleDistanceX - rect.width/2) ** 2 + (circleDistanceY - rect.height/2) ** 2)  # get total distance
+
+        return cornerDistance_sq <= self.radius
+    
+
+    def CalculateBallPlace(self, xVector:float, yVector:float):
+        pass
