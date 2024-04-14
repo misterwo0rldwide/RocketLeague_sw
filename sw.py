@@ -2,12 +2,14 @@ import pygame
 import sys
 from pygame.locals import *
 import physics
+import math
 
 
 RIGHT_WALL_BACKGROUND = 2497
 FLOOR_BACKGOURND = 1057
 
 GREEN = (0, 255, 0)
+GRAY = (128,128,128)
 
 # Initialize Pygame
 pygame.init()
@@ -80,6 +82,27 @@ class Game:
         
         return zoomed_player_image
 
+    def DrawPlayerEssntials(self, xOfPlayerOnScreen, yOfPlayerOnScreen):
+
+        # draw boost
+        amountOfBoost = (self.players.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
+
+        boostX = xOfPlayerOnScreen - 50
+        boostY = yOfPlayerOnScreen - 50
+
+        boostRect = pygame.Rect(boostX, boostY, amountOfBoost, 20)
+        pygame.draw.rect(self.screen, GREEN, boostRect)
+
+        # draw is able to jump
+        jumpX = xOfPlayerOnScreen
+        jumpY = yOfPlayerOnScreen - 70
+        radius = 10
+        color = GREEN if not self.players.IsDoubleJumping else GRAY
+
+        pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
+
+
+
 
     def MainLoop(self):
         running = True
@@ -100,6 +123,8 @@ class Game:
             # Draw everything
             self.screen.blit(self.background_image, (bg_x, bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
+
+            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff)
 
             # Update the display
             pygame.display.update()
@@ -129,8 +154,10 @@ class Player():
 
         self.accelrationX = 0
         self.accelrationY = 1
+
         self.IsJumping = False
         self.IsDoubleJumping = False
+
         self.PlayerTouchedControlrs = False
         self.IsBoosting = False
     
@@ -163,6 +190,10 @@ class Player():
             # if game was resized
             if event.type == pygame.WINDOWRESIZED:
                 self.width, self.height = pygame.display.get_surface().get_size()
+            # if game is closed
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
 
 
         # because the player usually presses the boost and not tapping it will not be as an event so we need to check it manually

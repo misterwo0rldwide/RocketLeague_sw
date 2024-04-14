@@ -12,6 +12,8 @@ REFRESH_RATE_TIME = 1/60  # we need the refresh rate time to calculate time diff
 
 FRICTION_FORCE_FK = 0.4
 
+MAX_BOOST = 100
+
 # a class for rectangle objects
 class Object:
     def __init__(self, width: int, height: int, weight: int,statringPlace:tuple):
@@ -39,6 +41,8 @@ class Object:
         self.startingAngle = 0
 
         self.boostAmount = 100
+
+        self.framesOnCeiling = 0
 
     def __Function(self, x):
         return (x**2) / 100
@@ -176,7 +180,6 @@ class Object:
             self.spinning = False
         elif self.yPlace <= CEILING_HEIGHT:
             self.yPlace = CEILING_HEIGHT
-            self.ySpeed = 0
             self.ObjectOnGround = True
             self.angle = 180
             self.flipObjectDraw = True if self.xSpeed >= 0 else False
@@ -222,6 +225,29 @@ class Object:
         totalVector = math.sqrt(xPower ** 2 + yPower ** 2)
         self.xVector = totalVector * math.cos(math.radians(angle)) * mul
         self.yVector = totalVector * -math.sin(math.radians(angle))
+    
+    # calculating the vectors using the accelrations
+    def __CalculateVectors(self,accelerationX: int, accelerationY: int ,IsJumping: bool, PlayerTouchedControls: bool):
+        if IsJumping:
+            self.__CalculateVectorsJump(PlayerTouchedControls)
+            self.ObjectOnGround = False
+        else:
+            if not self.ObjectOnGround:
+                accelerationY = 1
+                accelerationX = 0
+            elif not (self.xPlace == RIGHT_WALL or self.xPlace == LEFT_WALL):  # not on walls
+                accelerationY = 1
+            
+            self.xVector = accelerationX * self.ACCELARATION_CAR
+            self.yVector = accelerationY * self.GRAVITY_FORCE_ACCELARATION
+    
+    # calculate the ceiling acceleration - the player needs to stay a couple of seconds on ceiling
+    def __HangleCeiling(self):
+        if self.yPlace == CEILING_HEIGHT:
+            self.framesOnCeiling += 1
+            self.yVector = -self.GRAVITY_FORCE_ACCELARATION + (self.GRAVITY_FORCE_ACCELARATION / 10) * self.framesOnCeiling
+        else:
+            self.framesOnCeiling = 0
 
     # when the player is in the air he can be either moving itself the angle or in spinning mid air
     def __AdjustAngle(self, PlayerTouchedControls, acelerationX, accelerationY):
@@ -249,7 +275,7 @@ class Object:
             self.yVector -= totalVector * math.sin(math.radians(angle)) * self.weight / 60
 
             self.boostAmount -= 1
-
+        
 
     #this function will calculate where the players need to be according to the vectors
     def CalculateObjectPlace(self, accelerationX: int, accelerationY: int ,IsJumping: bool, PlayerTouchedControls: bool, IsBoosting: bool):
@@ -257,23 +283,14 @@ class Object:
         saveAccelerationX, saveAccelerationY = accelerationX, accelerationY
         self.xVector = accelerationX * self.ACCELARATION_CAR
 
-        if IsJumping:
-            self.__CalculateVectorsJump(PlayerTouchedControls)
-            self.ObjectOnGround = False
-        else:
-            if not self.ObjectOnGround:
-                accelerationY = 1
-                accelerationX = 0
-            elif not (self.xPlace == RIGHT_WALL or self.xPlace == LEFT_WALL):  # not on walls
-                accelerationY = 1
-            
-            self.xVector = accelerationX * self.ACCELARATION_CAR
-            self.yVector = accelerationY * self.GRAVITY_FORCE_ACCELARATION
+        self.__CalculateVectors(accelerationX, accelerationY,IsJumping, PlayerTouchedControls)
 
         if IsBoosting:
             self.__PlayerBoosting()
         else:
             self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
+
+        self.__HangleCeiling()
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
@@ -289,7 +306,7 @@ class Object:
 
         self.__CalculateMaxSpeed(IsBoosting)
 
-        # if xSpeed is close to zero we will set it to be zero
+        # if xSpeed is close to zero we will set it to be zero because of friction
         self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed
 
         # now lets put it into the current place
