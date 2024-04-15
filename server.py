@@ -46,7 +46,6 @@ class Match:
         except socket.error as e:
             print(f"socket does not exist, disconnecting it")
             return None
-
     
     def HandleGame(self):
         while self.timeLeft > 0:
@@ -58,7 +57,6 @@ class Match:
 
             self.player2Socket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, self.playerObject))
             self.player2Socket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.ball)))
-    
 
     def Lunching(self):
         self.playerSocket.send(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None))

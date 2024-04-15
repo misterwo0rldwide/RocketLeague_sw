@@ -63,7 +63,7 @@ class Server:
     def GameHandling(self, playerObject: physics.Object):
         pickleObject = pickle.dumps(playerObject)
         self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject))
-        
+
         secondPlayler = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
         ball = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
 
@@ -99,12 +99,9 @@ class Game:
         self.bg_y = 0
     
 
-    def ChangePlayerPictureWithAngle(self, image):
-        newAngle = self.player.PlayerObject.angle
-        flipX = self.player.PlayerObject.flipObjectDraw
-        
-        image = pygame.transform.rotate(image, newAngle)
-        return pygame.transform.flip(image, flipX, False) 
+    def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
+        image = pygame.transform.rotate(image, angle)
+        return pygame.transform.flip(image, flipObjectDraw, False) 
             
 
     def CorrectCameraView(self):
@@ -195,12 +192,15 @@ class Game:
 
     def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
         
-        secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
-        ballX, ballY = ball.xPlace, ball.yPlace
+        if secondPlayer != None:
+            secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
+            secondPlayerY -= 18
+        if ball != None:
+            ballX, ballY = ball.xPlace, ball.yPlace
 
-        if -self.bg_x + self.width > secondPlayerX > -self.bg_x and -self.bg_y + self.height > secondPlayerY > -self.bg_y:  # if on screen
-            secondPlayerImage = pygame.transform.flip(pygame.transform.rotate(self.player.player_image, secondPlayer.angle), secondPlayer.flipObjectDraw, False)
-            secondPlayerImage = pygame.transform.scale(secondPlayerImage, (PLAYER_WIDTH*1.6, PLAYER_HEIGHT*1.6))
+        if secondPlayer != None and -self.bg_x + self.width > secondPlayerX > -self.bg_x and -self.bg_y + self.height > secondPlayerY > -self.bg_y:  # if on screen
+            secondPlayerImage = self.ZoomOnPlayerImage()
+            secondPlayerImage = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw)
             self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
 
 
@@ -212,6 +212,8 @@ class Game:
         while not msg_from_server == protocol.STARTING_GAME:
             msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
 
+        secondPlayer, ball = None, None
+
         running = True
         while running:
             
@@ -221,11 +223,18 @@ class Game:
             self.width, self.height = self.player.width, self.player.height
 
             secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
+            try:
+                secondPlayer = pickle.loads(secondPlayer)
+            except Exception:
+                secondPlayer = None
+            try:
+                ball = pickle.loads(ball)
+            except Exception:
+                ball = None
 
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
-            zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image)
+            zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
             
             xDiff, yDiff = self.CorrectPlayerPlace()  #  move the player to be on the right place on screen
             zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
