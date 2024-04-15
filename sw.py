@@ -111,24 +111,6 @@ class Game:
 
         self.bg_x = 0 if self.bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -self.bg_x >= RIGHT_WALL_BACKGROUND - self.width else self.bg_x
         self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
-        
-        return self.bg_x, self.bg_y
-    
-    def CorrectPlayerPlace(self):
-        xDiff = 0
-        yDiff = 0
-
-        if self.bg_x == 0:
-            xDiff = -((self.bg_x - self.player.player_rect.x) % (self.width // 2))
-        elif self.bg_x == -(RIGHT_WALL_BACKGROUND - self.width):
-            xDiff = -(-self.bg_x + self.width // 2 - self.player.player_rect.x)
-
-        if self.bg_y == 0:
-            yDiff = self.player.player_rect.y - (self.height // 2)
-        elif self.bg_y == -(FLOOR_BACKGOURND - self.height):
-            yDiff = -(-self.bg_y + self.height // 2 - self.player.player_rect.y)
-
-        return xDiff, yDiff
     
     def ZoomOnPlayerImage(self):  # returned the player image after zooming on it
         zoom_level = 1.5  # Change this value to adjust zoom level
@@ -142,15 +124,15 @@ class Game:
         # draw boost amount
         amountOfBoost = (self.player.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
 
-        boostX = xOfPlayerOnScreen - 50
-        boostY = yOfPlayerOnScreen - 50
+        boostX = xOfPlayerOnScreen - 10
+        boostY = yOfPlayerOnScreen - 20
 
         boostRect = pygame.Rect(boostX, boostY, amountOfBoost, 20)
         pygame.draw.rect(self.screen, GREEN, boostRect)
 
         # draw is able to jump
-        jumpX = xOfPlayerOnScreen
-        jumpY = yOfPlayerOnScreen - 70
+        jumpX = xOfPlayerOnScreen + PLAYER_WIDTH - 10
+        jumpY = yOfPlayerOnScreen - 45
         radius = 10
         color = GREEN if not self.player.IsDoubleJumping else GRAY
 
@@ -168,8 +150,8 @@ class Game:
             angle = self.player.PlayerObject.angle if not self.player.PlayerObject.flipObjectDraw else 180 - self.player.PlayerObject.angle
 
             rectX, rectY = self.player.player_rect.x, self.player.player_rect.y - randint(0,10) # we will start drawing the blocks from the middle of the object and down
-            rectX = rectX - 45 * math.cos(math.radians(angle))
-            rectY = rectY + 45 * math.sin(math.radians(angle))
+            rectX = rectX - 40 * math.cos(math.radians(angle)) + 20
+            rectY = rectY + 40 * math.sin(math.radians(angle)) + 20
 
             self.boostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
             self.boostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
@@ -180,8 +162,8 @@ class Game:
             angle = secondPlayer.angle if not secondPlayer.flipObjectDraw else 180 - secondPlayer.angle
 
             rectX, rectY = secondPlayer.xPlace, secondPlayer.yPlace - randint(0,10) # we will start drawing the blocks from the middle of the object and down
-            rectX = rectX - 45 * math.cos(math.radians(angle))
-            rectY = rectY + 45 * math.sin(math.radians(angle))
+            rectX = rectX - 40 * math.cos(math.radians(angle)) + 20
+            rectY = rectY + 40 * math.sin(math.radians(angle)) + 20
 
             self.secondplayerboostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
             self.secondplayerboostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
@@ -252,15 +234,12 @@ class Game:
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
             zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
-            
-            xDiff, yDiff = self.CorrectPlayerPlace()  #  move the player to be on the right place on screen
-            zoomed_player_rect = zoomed_player_image.get_rect(center=(self.width // 2 + xDiff, self.height // 2 + yDiff))
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
-            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, secondPlayer)
+            self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
 
-            self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
+            self.screen.blit(zoomed_player_image, (self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, ball)
 
             # Update the display
