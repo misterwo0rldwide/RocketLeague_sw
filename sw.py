@@ -94,6 +94,7 @@ class Game:
         self.background_image = pygame.image.load("background.png").convert()
 
         self.boostSprites = []
+        self.secondplayerboostSprites = []
 
         self.bg_x = 0
         self.bg_y = 0
@@ -136,7 +137,7 @@ class Game:
         
         return zoomed_player_image
 
-    def DrawPlayerEssntials(self, xOfPlayerOnScreen, yOfPlayerOnScreen, isBoosting):
+    def DrawPlayerEssntials(self, xOfPlayerOnScreen : int, yOfPlayerOnScreen : int, secondPlayer :physics.Object):
 
         # draw boost amount
         amountOfBoost = (self.player.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
@@ -155,15 +156,14 @@ class Game:
 
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
-        self.DrawBoost(isBoosting)
+        self.DrawBoost(secondPlayer)
     
     
     # when player is boosting we will print his boost
-    def DrawBoost(self,isBoosting):
+    def DrawBoost(self, secondPlayer:physics.Object):
         # we will add to the list number of rects
-        if isBoosting and self.player.PlayerObject.boostAmount:
+        if self.player.PlayerObject.IsBoosting and self.player.PlayerObject.boostAmount:
             amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
-
 
             angle = self.player.PlayerObject.angle if not self.player.PlayerObject.flipObjectDraw else 180 - self.player.PlayerObject.angle
 
@@ -173,6 +173,18 @@ class Game:
 
             self.boostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
             self.boostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
+        
+        if secondPlayer != None and secondPlayer.IsBoosting and secondPlayer.boostAmount:
+            amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
+
+            angle = secondPlayer.angle if not secondPlayer.flipObjectDraw else 180 - secondPlayer.angle
+
+            rectX, rectY = secondPlayer.xPlace, secondPlayer.yPlace - randint(0,10) # we will start drawing the blocks from the middle of the object and down
+            rectX = rectX - 45 * math.cos(math.radians(angle))
+            rectY = rectY + 45 * math.sin(math.radians(angle))
+
+            self.secondplayerboostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
+            self.secondplayerboostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
         
         # now we will draw the boost
         if len(self.boostSprites) > 0:
@@ -188,13 +200,27 @@ class Game:
 
                         boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
                         pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
+            
+        if len(self.secondplayerboostSprites) > 0 and secondPlayer != None:
+            for index, boostRow in enumerate(self.secondplayerboostSprites):
+                boostTime = time.time() - boostRow[0]
+                if boostTime > 0.5:  # kill the boost row
+                    del self.secondplayerboostSprites[index]
+                else:
+                    rectX, rectY = boostRow[1][0], boostRow[1][1]
+                    if -self.bg_x + self.width > rectX > -self.bg_x and -self.bg_y + self.height > rectY > -self.bg_y:  # if on screen
+                        maxTimeR = 255/0.7
+                        maxTimeG = 165/0.7
+
+                        boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
+                        pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
         
 
     def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
         
+        secondPlayerX,secondPlayerY = 0,0
         if secondPlayer != None:
             secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
-            secondPlayerY -= 18
         if ball != None:
             ballX, ballY = ball.xPlace, ball.yPlace
 
@@ -202,8 +228,6 @@ class Game:
             secondPlayerImage = self.ZoomOnPlayerImage()
             secondPlayerImage = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw)
             self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
-
-
 
 
     def MainLoop(self):
@@ -219,18 +243,11 @@ class Game:
             
             
             #for player in self.players:
-            isBoosting = self.player.PlayerMotion()
+            self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
             secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            try:
-                secondPlayer = pickle.loads(secondPlayer)
-            except Exception:
-                secondPlayer = None
-            try:
-                ball = pickle.loads(ball)
-            except Exception:
-                ball = None
+            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
@@ -241,11 +258,10 @@ class Game:
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
+            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, secondPlayer)
+
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
             self.DrawBallAndSecondPlayer(secondPlayer, ball)
-
-            self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, isBoosting)
-
 
             # Update the display
             pygame.display.update()
@@ -368,8 +384,6 @@ class Player():
 
         isPlayerBoosting = self.IsBoosting
         self.accelrationX,self.accelrationY, self.IsJumping, self.IsBoosting = 0,1,False, False
-
-        return isPlayerBoosting
         
 
 width, height = SCREEN.get_size()

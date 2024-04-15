@@ -49,8 +49,8 @@ class Match:
     
     def HandleGame(self):
         while self.timeLeft > 0:
-            self.playerObject = self.RecvBySize(self.playerSocket).split(b'~')[-1]
-            self.player2Object = self.RecvBySize(self.player2Socket).split(b'~')[-1]
+            self.playerObject = self.RecvBySize(self.playerSocket)[protocol.BUFFER_LENGTH_SIZE:]
+            self.player2Object = self.RecvBySize(self.player2Socket)[protocol.BUFFER_LENGTH_SIZE:]
 
             self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, self.player2Object))
             self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.ball)))
