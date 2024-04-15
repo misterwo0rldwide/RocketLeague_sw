@@ -45,6 +45,8 @@ class Object:
 
         self.framesOnCeiling = 0
 
+        self.IsBoosting = False
+
     def __Function(self, x):
         return (x**2) / 100
     
@@ -177,7 +179,10 @@ class Object:
             self.ySpeed = 0
             self.angle = 0
             self.ObjectOnGround = True
-            self.flipObjectDraw = False if self.xSpeed >= 0 else True
+            if self.xSpeed > 0:
+                self.flipObjectDraw = False
+            elif self.xSpeed < 0:
+                self.flipObjectDraw = True
             self.spinning = False
         elif self.yPlace <= CEILING_HEIGHT:
             self.yPlace = CEILING_HEIGHT
@@ -196,12 +201,12 @@ class Object:
                 
             self.xVector += Fk  # multiply by which direction the car is facing
 
-    def __CalculateMaxSpeed(self, IsBoosting):
+    def __CalculateMaxSpeed(self):
 
         MAX_SPEED_X = 3 * self.weight
         MAX_SPEED_Y = 2.5 * self.weight
 
-        if not self.ObjectOnGround or IsBoosting:
+        if not self.ObjectOnGround or self.IsBoosting:
             MAX_SPEED_X *= 1.4
             MAX_SPEED_Y *= 1.2
 
@@ -285,8 +290,9 @@ class Object:
         self.xVector = accelerationX * self.ACCELARATION_CAR
 
         self.__CalculateVectors(accelerationX, accelerationY,IsJumping, PlayerTouchedControls)
+        self.IsBoosting = IsBoosting
 
-        if IsBoosting:
+        if self.IsBoosting:
             self.__PlayerBoosting()
         else:
             self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
@@ -305,7 +311,7 @@ class Object:
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
 
 
-        self.__CalculateMaxSpeed(IsBoosting)
+        self.__CalculateMaxSpeed()
 
         # if xSpeed is close to zero we will set it to be zero because of friction
         self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed

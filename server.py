@@ -16,21 +16,14 @@ BALL_STARTING_POS = (1260, 600)
 BUFFER_LIMIT = 1024
 
 PlayersAddrDict = {}
+currentGames = {}
 
 class Match:
     
-    def __init__(self, server_socket:socket, playerSocket, player2Socket):
+    def __init__(self, playerSocket:tuple, player2Socket:tuple):
 
-        self.server_socket = server_socket
-
-        self.playerSocket = playerSocket
-        self.player2Socket = player2Socket
-
-        self.playerObject = None
-        self.player2Object = None
-
-        self.playerGotData = False
-        self.Player2GotData = False
+        self.playerSocket, self.playerAddr = playerSocket
+        self.player2Socket, self.player2Addr = player2Socket
 
         self.ballX, self.ballY = BALL_STARTING_POS[0], BALL_STARTING_POS[1]
         self.ball = physics.Ball(500, BALL_STARTING_POS, 20)
@@ -38,67 +31,62 @@ class Match:
         self.timeLeft = time.time()  # get the starting game time
     
 
-    def RecvMsgBySizeUDP(self):
+    def RecvBySize(self, sock):
         try:
-            data,_ = self.playerSocket.recvfrom(BUFFER_LIMIT)
-            length = int(data[:4].decode())
-            if length < len(data):
-                data = data[:length]
+            size = int(sock.recv(protocol.BUFFER_LENGTH_SIZE).decode())  # get size
+            buffer = b''
+            while size:
+                new_bufffer = sock.recv(size)
+                if not new_bufffer:
+                    return b''
+                buffer += new_bufffer
+                size -= len(new_bufffer)
             
-            return data
-        except Exception:
+            return buffer
+        except socket.error as e:
+            print(f"socket does not exist, disconnecting it")
             return None
-        
-
-
-    def __GetPlayerInformation(self, playerAddr, data):
-        if playerAddr == self.playerSocket:
-            self.playerObject = pickle.loads(data)
-            self.playerGotData = True
-        else:
-            self.player2Object = pickle.loads(data)
-            self.Player2GotData = True
 
     
     def HandleGame(self):
-        while not (self.playerGotData and self.Player2GotData):  # if not all the players got the data
-            self.__RecvMsgBySizeUDP()
+        while self.timeLeft > 0:
+            self.playerObject = self.RecvBySize(self.playerSocket).split(b'~')[-1]
+            self.player2Object = self.RecvBySize(self.player2Socket).split(b'~')[-1]
 
-        self.server_socket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.player2Object)+b'~'+pickle.dumps(self.ball)), self.playerSocket)
-        self.server_socket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.playerObject)+b'~'+pickle.dumps(self.ball)), self.player2Socket)
+            self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, self.player2Object))
+            self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.ball)))
 
-        self.playerGotData = False
-        self.Player2GotData = False
+            self.player2Socket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, self.playerObject))
+            self.player2Socket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.ball)))
     
 
     def Lunching(self):
-        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.player2Socket)
-        self.player2Socket.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.playerSocket)
+        self.playerSocket.send(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None))
+        self.player2Socket.send(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None))
 
         self.HandleGame()
 
 
-def HandlePlayers(server_socket):
+def HandlePlayers(server_socket_tcp:socket):
     global PlayersAddrDict
 
     prevAddr = ''
 
     while True:
-        msgWithLength, addr = server_socket.recvfrom(BUFFER_LIMIT)
-        data = msgWithLength[4:]
+        sock, addr = server_socket_tcp.accept()
 
-        request = data.decode()[:3]
+        playerGameId = len(PlayersAddrDict) // 2
+        PlayersAddrDict[addr] = playerGameId
+        
+        if len(PlayersAddrDict) % 2 == 0:  # new match added - 2 players exist
+            game = Match((prevSock,prevAddr), (sock, addr))
+            t = threading.Thread(target=game.Lunching, args=())  # start game
+            t.start()
 
-        if addr not in PlayersAddrDict and request == protocol.PLAYER_CONNECTING:  # add player to game
-            playerGameId = len(PlayersAddrDict) // 2
-            PlayersAddrDict[addr] = playerGameId
-            
-            if len(PlayersAddrDict) % 2 == 0:  # new match added - 2 players exist
-                game = Match(server_socket, prevAddr, addr)
-                t = threading.Thread(target=game.Lunching, args=())  # start game
-                t.start()
+            print(f'new game started - player1-{prevAddr}, player2{addr}')
 
         prevAddr = addr
+        prevSock = sock
 
 
 
@@ -106,13 +94,16 @@ def HandlePlayers(server_socket):
 
 
 def main():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    server_socket.bind((IP, PORT))
+    server_socket_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket_tcp.bind((IP, PORT))
+    server_socket_tcp.listen()
 
-    HandlePlayers(server_socket)
+    print('Server running')
+
+    HandlePlayers(server_socket_tcp)
     
 
-    server_socket.close()
+    server_socket_tcp.close()
         
 
 

@@ -3,6 +3,8 @@ PLAYER_INFO = 'PNF'
 
 STARTING_GAME = 'STG'
 
+BUFFER_LENGTH_SIZE = 4
+
 
 # length of message~ command ~ info
 def BuildMsgProtocol(command, data):
@@ -10,7 +12,7 @@ def BuildMsgProtocol(command, data):
         command = command.encode()
     if not data is None and type(data) != bytes:
         data = data.encode()
-    else:
+    elif data is None:
         data = b''
     
     prtocolMSG = command + b'~' + data

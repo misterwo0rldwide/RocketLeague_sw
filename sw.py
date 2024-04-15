@@ -40,26 +40,34 @@ class Server:
     SERVER_PORT = 1393
 
     def __init__(self):
-        self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        msg = protocol.BuildMsgProtocol(protocol.PLAYER_CONNECTING, None)
-        print(msg)
-        self.playerSocket.sendto(msg, (self.SERVER_IP, self.SERVER_PORT))
+        self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.playerSocket.connect((self.SERVER_IP, self.SERVER_PORT))
     
-    def RecvMsgBySizeUDP(self):
+    def RecvBySize(self):
         try:
-            data,_ = self.playerSocket.recvfrom(BUFFER_LIMIT)
-            length = int(data[:4].decode())
-            if length < len(data):
-                data = data[:length]
+            size = int(self.playerSocket.recv(protocol.BUFFER_LENGTH_SIZE).decode())  # get size
+            buffer = b''
+            while size:
+                new_bufffer = self.playerSocket.recv(size)
+                if not new_bufffer:
+                    return b''
+                buffer += new_bufffer
+                size -= len(new_bufffer)
             
-            return data
-        except Exception:
+            return buffer
+        except socket.error as e:
+            print(f"socket does not exist, disconnecting it")
             return None
         
 
     def GameHandling(self, playerObject: physics.Object):
-        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(playerObject)), (self.SERVER_IP, self.SERVER_PORT))
-        return self.RecvMsgBySizeUDP()
+        pickleObject = pickle.dumps(playerObject)
+        self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject))
+        
+        secondPlayler = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
+        ball = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
+
+        return secondPlayler, ball
 
 
 
@@ -148,8 +156,6 @@ class Game:
         radius = 10
         color = GREEN if not self.player.IsDoubleJumping else GRAY
 
-
-
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
         self.DrawBoost(isBoosting)
@@ -185,11 +191,27 @@ class Game:
 
                         boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
                         pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
+        
+
+    def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
+        
+        secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
+        ballX, ballY = ball.xPlace, ball.yPlace
+
+        if -self.bg_x + self.width > secondPlayerX > -self.bg_x and -self.bg_y + self.height > secondPlayerY > -self.bg_y:  # if on screen
+            secondPlayerImage = pygame.transform.flip(pygame.transform.rotate(self.player.player_image, secondPlayer.angle), secondPlayer.flipObjectDraw, False)
+            secondPlayerImage = pygame.transform.scale(secondPlayerImage, (PLAYER_WIDTH*1.6, PLAYER_HEIGHT*1.6))
+            self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
 
 
 
 
     def MainLoop(self):
+
+        msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
+        while not msg_from_server == protocol.STARTING_GAME:
+            msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
+
         running = True
         while running:
             
@@ -197,6 +219,9 @@ class Game:
             #for player in self.players:
             isBoosting = self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
+
+            secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
@@ -208,11 +233,9 @@ class Game:
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
             self.screen.blit(zoomed_player_image, zoomed_player_rect.topleft)
+            self.DrawBallAndSecondPlayer(secondPlayer, ball)
 
             self.DrawPlayerEssntials(self.width // 2 + xDiff, self.height // 2 + yDiff, isBoosting)
-
-            info = self.gameNetwork.RecvMsgBySizeUDP().split(b'~')
-            secondPlayer, ball = pickle.loads(info[0]), pickle.loads(info[1])
 
 
             # Update the display
