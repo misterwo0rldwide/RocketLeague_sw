@@ -11,7 +11,8 @@ DISTANCE_FROM__WALL = 110  # distance from wall of ramp
 
 REFRESH_RATE_TIME = 1/60  # we need the refresh rate time to calculate time differences
 
-FRICTION_FORCE_FK = 0.4
+FRICTION_FORCE_PLAYER_FK = 0.4
+FRICTION_FORCE_BALL_FK = 0.6
 
 MAX_BOOST = 100
 
@@ -47,17 +48,17 @@ class Object:
 
         self.IsBoosting = False
 
-    def __Function(self, x):
+    def Function(self, x):
         return (x**2) / 100
     
-    def __FindXValueForYValue(self, y):
+    def FindXValueForYValue(self, y):
         return math.sqrt(y * 100)
 
     def __DerivativeFunction(self, x):
         return 2*x / 100
 
     # the sides of the map require the player to change its angle
-    def __GetObjectAngleOnSides(self, xDiff):
+    def GetObjectAngleOnSides(self, xDiff):
         # we will get the angle of the player with incline of the function
         incline = self.__DerivativeFunction(xDiff)
         angle = math.degrees(math.atan(incline)) * 1.168  # shift tan of the incline
@@ -79,7 +80,7 @@ class Object:
 
 
     def __CalculateAnglesWallRamps(self, rightWall:bool ,xDiff:int, onFloorRamp:bool):
-        normalWallAngle = self.__GetObjectAngleOnSides(xDiff)
+        normalWallAngle = self.GetObjectAngleOnSides(xDiff)
         if rightWall:  # if on right wall ramps
             if self.ySpeed <= 0 and onFloorRamp:
                 self.angle = normalWallAngle
@@ -108,24 +109,21 @@ class Object:
                 self.flipObjectDraw = False
 
     #the object needs to adjust its angle
-    def __ObjectOnRamps(self):
-
-        self.__ObjectBoundaries()  # firstly we will check the state of the object
-
+    def ObjectOnRamps(self):
 
         #check if right wall
         if RIGHT_WALL - self.xPlace < DISTANCE_FROM__WALL:  # right wall
             xDiffRightWall = DISTANCE_FROM__WALL - (RIGHT_WALL - self.xPlace)
-            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed > 0)
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT <= self.__Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed < 0)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT <= self.Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed < 0)
 
             if self.xSpeed > 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
-                self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffRightWall) if onFloorRamp\
-                                    else CEILING_HEIGHT + self.__Function(xDiffRightWall) if onCeilingRamp\
+                self.yPlace = FLOOR_HEIGHT - self.Function(xDiffRightWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.Function(xDiffRightWall) if onCeilingRamp\
                                     else self.yPlace
             elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
                 yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
-                self.xPlace = RIGHT_WALL - DISTANCE_FROM__WALL + self.__FindXValueForYValue(yDiff)
+                self.xPlace = RIGHT_WALL - DISTANCE_FROM__WALL + self.FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnGround = True
@@ -133,16 +131,16 @@ class Object:
         
         elif self.xPlace - LEFT_WALL < DISTANCE_FROM__WALL:  # left wall
             xDiffLeftWall = DISTANCE_FROM__WALL - (self.xPlace - LEFT_WALL)
-            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.__Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed > 0)
-            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.__Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed < 0)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed < 0)
             
             if self.xSpeed < 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
-                self.yPlace = FLOOR_HEIGHT - self.__Function(xDiffLeftWall) if onFloorRamp\
-                                    else CEILING_HEIGHT + self.__Function(xDiffLeftWall) if onCeilingRamp\
+                self.yPlace = FLOOR_HEIGHT - self.Function(xDiffLeftWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.Function(xDiffLeftWall) if onCeilingRamp\
                                     else self.yPlace
             elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
                 yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
-                self.xPlace = LEFT_WALL + DISTANCE_FROM__WALL - self.__FindXValueForYValue(yDiff)
+                self.xPlace = LEFT_WALL + DISTANCE_FROM__WALL - self.FindXValueForYValue(yDiff)
             
             if onFloorRamp or onCeilingRamp:
                 self.ObjectOnGround = True
@@ -193,15 +191,15 @@ class Object:
 
 
 
-    def __CalculateFrictionOfObject(self):
+    def CalculateFrictionOfObject(self, firction_force):
         # firstly for the object to have firction we need it to be on ground
         # we also need to check if the object is moving
         if self.ObjectOnGround and self.xSpeed != 0:
-            Fk = self.yVector * FRICTION_FORCE_FK * -(self.xSpeed // abs(self.xSpeed))
+            Fk = self.yVector * firction_force * -(self.xSpeed // abs(self.xSpeed))
                 
             self.xVector += Fk  # multiply by which direction the car is facing
 
-    def __CalculateMaxSpeed(self):
+    def CalculateMaxSpeed(self):
 
         MAX_SPEED_X = 3 * self.weight
         MAX_SPEED_Y = 2.5 * self.weight
@@ -248,7 +246,7 @@ class Object:
             self.yVector = accelerationY * self.GRAVITY_FORCE_ACCELARATION
     
     # calculate the ceiling acceleration - the player needs to stay a couple of seconds on ceiling
-    def __HangleCeiling(self):
+    def __HandleCeiling(self):
         if self.yPlace == CEILING_HEIGHT:
             self.framesOnCeiling += 1
             self.yVector = -self.GRAVITY_FORCE_ACCELARATION + (self.GRAVITY_FORCE_ACCELARATION / 10) * self.framesOnCeiling
@@ -297,13 +295,13 @@ class Object:
         else:
             self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
 
-        self.__HangleCeiling()
+        self.__HandleCeiling()
 
         # we will use the physics function - currentPlace = placeBefore + speedBefore*timeDiff + (acceleration / 2) * timeDiff ** 2
         # we will use this function for both of the axis, one for the x axis and one for the y axis
 
         # before calculating we need to also calculate the Friction on the object
-        self.__CalculateFrictionOfObject()
+        self.CalculateFrictionOfObject(FRICTION_FORCE_PLAYER_FK)
 
         # firstly we will need the speed which we will calculate 
         # we will use currentSpeed = prevSpeed + acceleration * timeDiff
@@ -311,7 +309,7 @@ class Object:
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
 
 
-        self.__CalculateMaxSpeed()
+        self.CalculateMaxSpeed()
 
         # if xSpeed is close to zero we will set it to be zero because of friction
         self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed
@@ -328,7 +326,8 @@ class Object:
         self.xPlace = self.xPlace + xDiff
         self.yPlace = self.yPlace + yDiff
 
-        self.__ObjectOnRamps()
+        self.__ObjectBoundaries()  # firstly we will check the state of the object
+        self.ObjectOnRamps()
 
         # calculating the real speed of the object
         self.ySpeed = (self.yPlace - yplace) / REFRESH_RATE_TIME
@@ -345,8 +344,9 @@ class Ball(Object):
     def __init__(self, weight: int, startingPlace: tuple, radius:int):
         Object.__init__(self, 0, 0, weight, startingPlace)
         self.radius = radius
+        self.ObjectOnGround = False # ball starts from air
 
-    
+        self.ballBounce = False
 
     def __BallRectCollision(self, rect : Object):
         circleDistanceX = abs(self.xPlace - rect.xPlace)  # calculate distance from center to center
@@ -367,5 +367,108 @@ class Ball(Object):
         return cornerDistance_sq <= self.radius
     
 
-    def CalculateBallPlace(self, xVector:float, yVector:float):
-        pass
+    def BallBoundaries(self):
+        self.ObjectOnGround = False
+
+        if self.xPlace <= LEFT_WALL:
+            self.xPlace = LEFT_WALL
+            self.xSpeed *= -1
+            self.ObjectOnGround = True
+            self.angle = 0
+
+        elif self.xPlace + self.radius / 2 >= RIGHT_WALL:
+            self.xPlace = RIGHT_WALL - self.radius / 2
+            self.xSpeed *= -1
+            self.ObjectOnGround = True
+            self.angle = 0
+        
+        if self.yPlace + self.radius >= FLOOR_HEIGHT:
+            self.yPlace = FLOOR_HEIGHT - self.radius
+            self.ySpeed *= -1
+            self.ObjectOnGround = True
+            self.angle = 0
+
+        elif self.yPlace <= CEILING_HEIGHT:
+            self.yPlace = CEILING_HEIGHT
+            self.ySpeed *= -1
+            self.ObjectOnGround = True
+            self.angle = 0
+    
+
+    def BallOnRamps(self):
+        #check if right wall
+        if RIGHT_WALL - self.xPlace - self.radius * 2 < DISTANCE_FROM__WALL:  # right wall
+            xDiffRightWall = DISTANCE_FROM__WALL - (RIGHT_WALL - self.xPlace + self.radius)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace - self.radius <= self.Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffRightWall) and (self.xPlace != RIGHT_WALL or self.ySpeed < 0)
+
+            if self.xSpeed > 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
+                self.yPlace = FLOOR_HEIGHT - self.Function(xDiffRightWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.Function(xDiffRightWall) if onCeilingRamp\
+                                    else self.yPlace
+            elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
+                self.xPlace = RIGHT_WALL - DISTANCE_FROM__WALL + self.FindXValueForYValue(yDiff)
+            
+            if onFloorRamp or onCeilingRamp:
+                self.angle = self.GetObjectAngleOnSides(xDiffRightWall)
+
+        
+        elif self.xPlace - LEFT_WALL - self.radius < DISTANCE_FROM__WALL:  # left wall
+            xDiffLeftWall = DISTANCE_FROM__WALL - (self.xPlace - LEFT_WALL)
+            onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed > 0)
+            onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.Function(xDiffLeftWall) and (self.xPlace != LEFT_WALL or self.ySpeed < 0)
+            
+            if self.xSpeed < 0 and (onCeilingRamp or onFloorRamp):  # if going up the ramp
+                self.yPlace = FLOOR_HEIGHT - self.Function(xDiffLeftWall) if onFloorRamp\
+                                    else CEILING_HEIGHT + self.Function(xDiffLeftWall) if onCeilingRamp\
+                                    else self.yPlace
+            elif (onCeilingRamp or onFloorRamp):  # if going down the ramp
+                yDiff = FLOOR_HEIGHT - self.yPlace if onFloorRamp else self.yPlace - CEILING_HEIGHT if onCeilingRamp else 0
+                self.xPlace = LEFT_WALL + DISTANCE_FROM__WALL - self.FindXValueForYValue(yDiff)
+            
+            if onFloorRamp or onCeilingRamp:
+                self.angle = self.GetObjectAngleOnSides(xDiffLeftWall)
+
+
+    def CalculateBallPlace(self):
+        #this function will be close to the object one, but because ball is not controlled by anyone, it will be slightly different
+        #we will also use similar function such as x = x0 + v0(t - t0) + a/2(t - t0)^2
+
+        self.CalculateFrictionOfObject(FRICTION_FORCE_PLAYER_FK)
+        
+        self.xSpeed = self.xSpeed + self.xVector * REFRESH_RATE_TIME
+        self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
+
+        self.CalculateMaxSpeed()
+        self.BallBoundaries()
+
+        self.xSpeed = 0 if abs(self.xSpeed) - 5 <= 0 else self.xSpeed
+        
+        xDiff = self.xSpeed*REFRESH_RATE_TIME + (self.xVector / 2) * REFRESH_RATE_TIME ** 2
+        yDiff = self.ySpeed*REFRESH_RATE_TIME + (self.yVector / 2) * REFRESH_RATE_TIME ** 2
+
+        xplace = self.xPlace
+        yplace = self.yPlace
+
+        self.xPlace = self.xPlace + xDiff
+        self.yPlace = self.yPlace + yDiff
+
+        
+        self.BallOnRamps()
+
+        # calculating the real speed of the object
+        self.ySpeed = (self.yPlace - yplace) / REFRESH_RATE_TIME if not self.ObjectOnGround and not\
+                      (self.xPlace + self.radius / 2 != RIGHT_WALL or self.xPlace != RIGHT_WALL) else self.ySpeed
+        self.xSpeed = (self.xPlace - xplace) / REFRESH_RATE_TIME
+
+        if self.angle != 0:
+            totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
+            angle = (self.angle + 90) % 360 if not self.flipObjectDraw else (self.angle - 90) % 360
+            self.xSpeed =  totalSpeed * math.cos(math.radians(angle))
+            self.ySpeed =  totalSpeed * math.sin(math.radians(angle))
+            self.angle = 0
+
+        # different from other objects, with balls (an object that no one controls) we need to zero out the vectors
+        self.xVector = 0
+        self.yVector = self.GRAVITY_FORCE_ACCELARATION

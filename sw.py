@@ -26,6 +26,8 @@ BOOST_WIDTH = 8
 
 BUFFER_LIMIT = 1024
 
+BALL_RADIUS = 35
+
 
 # Initialize Pygame
 pygame.init()
@@ -85,19 +87,24 @@ class Game:
         self.width = self.player.width
         self.height = self.player.height
 
-        self.gameNetwork = Server()
+        #self.gameNetwork = Server()
 
         self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         pygame.display.set_caption("Rocket League")
 
         # Load the background image
         self.background_image = pygame.image.load("background.png").convert()
+        self.ballImage = pygame.transform.scale(pygame.image.load("ball.png"), (BALL_RADIUS*2,BALL_RADIUS*2))
+        self.ballImage.set_colorkey((0,0,0))
+        self.ballImage.convert_alpha()
 
         self.boostSprites = []
         self.secondplayerboostSprites = []
 
         self.bg_x = 0
         self.bg_y = 0
+
+        self.ball = physics.Ball(200, (310, 500), BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
@@ -210,13 +217,18 @@ class Game:
             secondPlayerImage = self.ZoomOnPlayerImage()
             secondPlayerImage = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw)
             self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
+        
+        if -self.bg_x + self.width > ballX > -self.bg_x and -self.bg_y + self.height > ballY > -self.bg_y:
+            ballImage = self.ChangePlayerPictureWithAngle(self.ballImage, ball.angle, ball.flipObjectDraw)
+            self.screen.blit(ballImage, (ballX + self.bg_x, ballY + self.bg_y))
+
 
 
     def MainLoop(self):
 
-        msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
+        """msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
         while not msg_from_server == protocol.STARTING_GAME:
-            msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
+            msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]"""
 
         secondPlayer, ball = None, None
 
@@ -228,8 +240,10 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
+            self.ball.CalculateBallPlace()
+
+            #secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            #secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 
             self.CorrectCameraView()  # get the camera right place
             zoomed_player_image = self.ZoomOnPlayerImage()
@@ -240,7 +254,7 @@ class Game:
             self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
 
             self.screen.blit(zoomed_player_image, (self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y))
-            self.DrawBallAndSecondPlayer(secondPlayer, ball)
+            self.DrawBallAndSecondPlayer(secondPlayer, self.ball)
 
             # Update the display
             pygame.display.update()
