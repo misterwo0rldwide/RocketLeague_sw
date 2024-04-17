@@ -104,7 +104,7 @@ class Game:
         self.bg_x = 0
         self.bg_y = 0
 
-        self.ball = physics.Ball(200, (310, 500), BALL_RADIUS)
+        self.ball = physics.Ball(70, (350, 200), BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
