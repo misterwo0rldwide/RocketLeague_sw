@@ -345,27 +345,6 @@ class Ball(Object):
         Object.__init__(self, 0, 0, weight, startingPlace)
         self.radius = radius
         self.ObjectOnGround = False # ball starts from air
-
-        self.ySpeed = -50000
-
-
-    def __BallRectCollision(self, rect : Object):
-        circleDistanceX = abs(self.xPlace - rect.xPlace)  # calculate distance from center to center
-        circleDistanceY = abs(self.yPlace - rect.yPlace)
-
-        if circleDistanceX > rect.width/2 + self.radius:
-            return False
-        if circleDistanceY > rect.height/2 + self.radius:
-            return False
-
-        if circleDistanceX <= rect.width/2:
-            return False
-        if circleDistanceY <= rect.height/2:
-            return False
-
-        cornerDistance_sq = math.sqrt((circleDistanceX - rect.width/2) ** 2 + (circleDistanceY - rect.height/2) ** 2)  # get total distance
-
-        return cornerDistance_sq <= self.radius
     
 
     def BallBoundaries(self):
@@ -403,16 +382,14 @@ class Ball(Object):
             onFloorRamp = FLOOR_HEIGHT - self.yPlace - self.radius <= self.Function(xDiffRightWall)
             onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffRightWall)
 
-            if (onFloorRamp or onCeilingRamp) and xDiffRightWall > 50:
+            if (onFloorRamp or onCeilingRamp) and xDiffRightWall > 20:
+                self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffRightWall)
                 angle = self.GetObjectAngleOnSides(xDiffRightWall)
-                angle = angle if onFloorRamp else 270 - angle
+                angle = 180 - angle if onFloorRamp else 270 - angle
 
-                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
-                self.xSpeed = totalSpeed * math.cos(math.radians(2 * angle))
-                self.ySpeed = -totalSpeed * math.sin(math.radians(2 * angle))
-
-                if angle > 180:
-                    self.xSpeed *= -1
+                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
+                self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
+                self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
                 
                 return True
 
@@ -422,32 +399,85 @@ class Ball(Object):
             onFloorRamp = FLOOR_HEIGHT - self.yPlace <= self.Function(xDiffLeftWall)
             onCeilingRamp = self.yPlace - CEILING_HEIGHT < self.Function(xDiffLeftWall)
             
-            if onFloorRamp or onCeilingRamp and xDiffLeftWall > 50:          
+            if onFloorRamp or onCeilingRamp and xDiffLeftWall > 20:        
+                self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffRightWall)
                 angle = self.GetObjectAngleOnSides(xDiffLeftWall)
-                angle = 360 - angle if onFloorRamp else 90 + angle
+                angle = angle if onFloorRamp else 90 + angle
 
-                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
-                self.xSpeed = totalSpeed * math.cos(math.radians(2 * angle))
-                self.ySpeed = -totalSpeed * math.sin(math.radians(2 * angle))
-
-                if angle > 180:
-                    self.xSpeed *= -1
+                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
+                self.xSpeed += (totalSpeed) * math.cos(math.radians(angle))
+                self.ySpeed -= (totalSpeed) * math.sin(math.radians(angle))
 
                 return True
-            
 
 
+    def __BallRectCollision(self, rect : Object):
+        circleDistanceX = abs((self.xPlace + self.radius) - rect.xPlace)  # calculate distance from center to center
+        circleDistanceY = abs((self.yPlace + self.radius) - rect.yPlace)
 
-    def CalculateBallPlace(self):
+        if circleDistanceX > rect.width/2 + self.radius:
+            return False
+        if circleDistanceY > rect.height/2 + self.radius:
+            return False
+
+        if circleDistanceX <= rect.width/2:
+            return True
+        if circleDistanceY <= rect.height/2:
+            return True
+
+        cornerDistance_sq = math.sqrt((circleDistanceX - rect.width/2) ** 2 + (circleDistanceY - rect.height/2) ** 2)  # get total distance
+
+        return cornerDistance_sq <= self.radius            
+
+    # we will need collision with objects for this one
+    # because more than one object can hit the balls we will get a list of all the objects
+    # and we will check which one is hitting the ball then we will calculate the balls vectors
+    def CollisionWithObject(self, rects: list[Object]):
+        # we will use attack and momentuem equation which is m1 * v1 + m2 * v2 = m1 * u1 + m2 * u2 * cos(a)
+        # where v is the speed before and u is the speed after
+
+        # we need the center of the ball
+        centerX = self.xPlace + self.radius
+        centerY = self.yPlace + self.radius
+
+        # because there are many object we will just sum up all their powers
+        finalSpeed = 0
+        finalSpeedY = 0
+
+        for rect in rects:
+            if abs(centerX - (rect.xPlace + rect.width)) <= self.radius:  # if indeed a collision
+                # x axis speed
+
+                m1 = rect.weight
+                v1 = rect.xSpeed
+
+                m2 = self.weight
+                v2 = self.xSpeed
+
+                u1 = v1 / 2
+                xDiff = centerX - (rect.xPlace + rect.width)
+                alpha = math.degrees(math.acos(xDiff / self.radius))
+
+                # now we will find u2
+                finalSpeed += (m1*v1 + m2*v2 - m1 * u1) / (m2 * math.cos(math.radians(alpha)))
+                finalSpeedY = math.sin(math.radians(finalSpeed))
+        
+        self.xSpeed = finalSpeed if finalSpeed != 0 else self.xSpeed
+
+
+    def CalculateBallPlace(self, rect: list[Object]):
         #this function will be close to the object one, but because ball is not controlled by anyone, it will be slightly different
         #we will also use similar function such as x = x0 + v0(t - t0) + a/2(t - t0)^2
 
         self.CalculateFrictionOfObject(FRICTION_FORCE_BALL_FK)
-        self.CalculateMaxSpeed()
         self.BallOnRamps()
+        self.CollisionWithObject(rect)
         
         self.xSpeed = self.xSpeed + self.xVector * REFRESH_RATE_TIME
-        self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
+        #self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
+
+        self.xSpeed = 0 if abs(self.xSpeed) < 5 else self.xSpeed
+        self.CalculateMaxSpeed()
 
         xDiff = self.xSpeed*REFRESH_RATE_TIME + (self.xVector / 2) * REFRESH_RATE_TIME ** 2
         yDiff = self.ySpeed*REFRESH_RATE_TIME + (self.yVector / 2) * REFRESH_RATE_TIME ** 2
@@ -467,4 +497,4 @@ class Ball(Object):
         self.xVector = 0
         self.yVector = self.GRAVITY_FORCE_ACCELARATION
 
-        print(self.xPlace, self.yPlace, self.xSpeed)
+        

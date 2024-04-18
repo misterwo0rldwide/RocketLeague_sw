@@ -19,8 +19,8 @@ RIGHT_WALL_BG_X = 4647
 GREEN = (0, 255, 0)
 GRAY = (128,128,128)
 
-PLAYER_WIDTH = 50
-PLAYER_HEIGHT = 25
+PLAYER_WIDTH = 75
+PLAYER_HEIGHT = 38
 
 BOOST_WIDTH = 8
 
@@ -104,7 +104,7 @@ class Game:
         self.bg_x = 0
         self.bg_y = 0
 
-        self.ball = physics.Ball(70, (350, 200), BALL_RADIUS)
+        self.ball = physics.Ball(70, (800, 850 - BALL_RADIUS), BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
@@ -118,13 +118,6 @@ class Game:
 
         self.bg_x = 0 if self.bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -self.bg_x >= RIGHT_WALL_BACKGROUND - self.width else self.bg_x
         self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
-    
-    def ZoomOnPlayerImage(self):  # returned the player image after zooming on it
-        zoom_level = 1.5  # Change this value to adjust zoom level
-        zoomed_player_image = pygame.transform.scale(self.player.player_image, (int(self.player.player_rect.width * zoom_level),
-                                                                    int(self.player.player_rect.height * zoom_level)))
-        
-        return zoomed_player_image
 
     def DrawPlayerEssntials(self, xOfPlayerOnScreen : int, yOfPlayerOnScreen : int, secondPlayer :physics.Object):
 
@@ -138,7 +131,7 @@ class Game:
         pygame.draw.rect(self.screen, GREEN, boostRect)
 
         # draw is able to jump
-        jumpX = xOfPlayerOnScreen + PLAYER_WIDTH - 10
+        jumpX = xOfPlayerOnScreen + PLAYER_WIDTH / 2 + 5
         jumpY = yOfPlayerOnScreen - 45
         radius = 10
         color = GREEN if not self.player.IsDoubleJumping else GRAY
@@ -214,7 +207,7 @@ class Game:
             ballX, ballY = ball.xPlace, ball.yPlace
 
         if secondPlayer != None and -self.bg_x + self.width > secondPlayerX > -self.bg_x and -self.bg_y + self.height > secondPlayerY > -self.bg_y:  # if on screen
-            secondPlayerImage = self.ZoomOnPlayerImage()
+            secondPlayerImage = self.player.player_image
             secondPlayerImage = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw)
             self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
         
@@ -240,21 +233,22 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            self.ball.CalculateBallPlace()
+            self.ball.CalculateBallPlace([self.player.PlayerObject])
 
             #secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
             #secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 
             self.CorrectCameraView()  # get the camera right place
-            zoomed_player_image = self.ZoomOnPlayerImage()
-            zoomed_player_image = self.ChangePlayerPictureWithAngle(zoomed_player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
+            player_image = self.player.player_image
+            player_image = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
             self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
 
-            self.screen.blit(zoomed_player_image, (self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y))
+            self.screen.blit(player_image, (self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, self.ball)
+
 
             # Update the display
             pygame.display.update()
