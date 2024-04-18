@@ -27,6 +27,7 @@ BOOST_WIDTH = 8
 BUFFER_LIMIT = 1024
 
 BALL_RADIUS = 35
+BALL_WEIGHT = 70
 
 
 # Initialize Pygame
@@ -94,8 +95,8 @@ class Game:
 
         # Load the background image
         self.background_image = pygame.image.load("background.png").convert()
-        self.ballImage = pygame.transform.scale(pygame.image.load("ball.png"), (BALL_RADIUS*2,BALL_RADIUS*2))
-        self.ballImage.set_colorkey((0,0,0))
+        self.ballImage = pygame.transform.scale(pygame.image.load("soccer.png"), (BALL_RADIUS*2,BALL_RADIUS*2))
+        self.ballImage.set_colorkey((255,255,255))
         self.ballImage.convert_alpha()
 
         self.boostSprites = []
@@ -104,7 +105,7 @@ class Game:
         self.bg_x = 0
         self.bg_y = 0
 
-        self.ball = physics.Ball(70, (800, 850 - BALL_RADIUS), BALL_RADIUS)
+        self.ball = physics.Ball(BALL_WEIGHT, (700, 850-BALL_RADIUS), BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
@@ -234,7 +235,6 @@ class Game:
             self.width, self.height = self.player.width, self.player.height
 
             self.ball.CalculateBallPlace([self.player.PlayerObject])
-
             #secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
             #secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 

@@ -1,6 +1,5 @@
 #Rocket League SideSwipe Game - Omer Kfir Herzog יא'3
 import socket
-import math
 import threading
 import physics
 import time
@@ -51,6 +50,10 @@ class Match:
         while self.timeLeft > 0:
             self.playerObject = self.RecvBySize(self.playerSocket)[protocol.BUFFER_LENGTH_SIZE:]
             self.player2Object = self.RecvBySize(self.player2Socket)[protocol.BUFFER_LENGTH_SIZE:]
+
+            playerObject = pickle.loads(self.playerObject)
+            player2Object = pickle.loads(self.player2Object)
+            self.ball.CalculateBallPlace([playerObject, player2Object])
 
             self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, self.player2Object))
             self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickle.dumps(self.ball)))
