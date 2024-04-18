@@ -105,12 +105,14 @@ class Game:
         self.bg_x = 0
         self.bg_y = 0
 
-        self.ball = physics.Ball(BALL_WEIGHT, (700, 850-BALL_RADIUS), BALL_RADIUS)
+        self.ball = physics.Ball(BALL_WEIGHT, (700, 200), BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
         image = pygame.transform.rotate(image, angle)
-        return pygame.transform.flip(image, flipObjectDraw, False) 
+        image = pygame.transform.flip(image, flipObjectDraw, False) 
+        rect = image.get_rect(center=self.player.player_rect.center)
+        return image, rect
             
 
     def CorrectCameraView(self):
@@ -119,6 +121,7 @@ class Game:
 
         self.bg_x = 0 if self.bg_x >= 0 else -(RIGHT_WALL_BACKGROUND - self.width) if -self.bg_x >= RIGHT_WALL_BACKGROUND - self.width else self.bg_x
         self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
+        
 
     def DrawPlayerEssntials(self, xOfPlayerOnScreen : int, yOfPlayerOnScreen : int, secondPlayer :physics.Object):
 
@@ -213,9 +216,9 @@ class Game:
             self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
         
         if -self.bg_x + self.width > ballX > -self.bg_x and -self.bg_y + self.height > ballY > -self.bg_y:
-            ballImage = self.ChangePlayerPictureWithAngle(self.ballImage, ball.angle, ball.flipObjectDraw)
-            self.screen.blit(ballImage, (ballX + self.bg_x, ballY + self.bg_y))
-
+            ballImage = pygame.transform.rotate(self.ballImage, self.ball.angle)
+            rect = ballImage.get_rect(center=(ballX + BALL_RADIUS, ballY + BALL_RADIUS))
+            self.screen.blit(ballImage, (rect.x + self.bg_x, rect.y + self.bg_y))
 
 
     def MainLoop(self):
@@ -240,13 +243,13 @@ class Game:
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
-            player_image = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
+            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
             self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
 
-            self.screen.blit(player_image, (self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y))
+            self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, self.ball)
 
 

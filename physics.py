@@ -541,7 +541,7 @@ class Ball(Object):
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
 
         self.xSpeed = 0 if abs(self.xSpeed) < 5 else self.xSpeed
-        self.CalculateMaxSpeed(3, 3)
+        self.CalculateMaxSpeed(5, 3.5)
 
         xDiff = self.xSpeed*REFRESH_RATE_TIME + (self.xVector / 2) * REFRESH_RATE_TIME ** 2
         yDiff = self.ySpeed*REFRESH_RATE_TIME + (self.yVector / 2) * REFRESH_RATE_TIME ** 2
@@ -561,6 +561,6 @@ class Ball(Object):
         self.xVector = 0
         self.yVector = self.GRAVITY_FORCE_ACCELARATION
 
-        #self.angle += self.angleSub / 500
+        self.angle -= self.xSpeed / self.radius
 
         
