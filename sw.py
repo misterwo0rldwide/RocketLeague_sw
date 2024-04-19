@@ -256,15 +256,40 @@ class Game:
             self.player.PlayerObject.flipObjectDraw = True
 
 
-    def MainLoop(self):
+    def render_text(self, text, font, color):
+        text_surface = font.render(text, True, color)
+        return text_surface, text_surface.get_rect()
+    
+    
+    def WaitFiveSeconds(self):
+        font = pygame.font.Font(None, 100)
+        t = time.time()
+        wantedTime = t + 5  # wait for five seconds
         
+        while wantedTime - t > 0:
+            text_surface, text_rect = self.render_text(str(int(wantedTime - t)), font, (255, 215, 0))
+            self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
+            self.screen.blit(text_surface, (self.width // 2, self.height // 2))
+
+            pygame.display.flip()
+
+            t = time.time()
+
+
+    def MainLoop(self):
+        colorOfTimer = (255,215,0)
+        font = pygame.font.Font(None, 50)
+
         self.gameNetwork.WaitForGame()
         isFirstPlayer = self.gameNetwork.GetStartingPos()
         self.PutObjectInPlace(isFirstPlayer)
 
+        self.WaitFiveSeconds()
+
         secondPlayer, ball = None, None
 
         running = True
+        endGameTime = time.time() + 120  # two minutes from now
         while running: 
             #for player in self.players:
             self.player.PlayerMotion()
@@ -283,6 +308,13 @@ class Game:
 
             self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, ball)
+
+            timeLeft = int(endGameTime - time.time())
+            minutes, seconds = divmod(timeLeft, 60)
+            timeInStr = f'{minutes:02d}:{seconds:02d}'  # format for minutes and seconds
+
+            text_surface, text_rect = self.render_text(timeInStr, font, colorOfTimer)
+            self.screen.blit(text_surface, (self.width //2, 20))
 
             # Update the display
             pygame.display.update()
