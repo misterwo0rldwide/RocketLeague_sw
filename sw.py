@@ -26,8 +26,11 @@ BOOST_WIDTH = 8
 
 BUFFER_LIMIT = 1024
 
-BALL_RADIUS = 35
+BALL_RADIUS = 40
 BALL_WEIGHT = 70
+
+FIRST_PLAYER_POS = (500, 850)
+SECOND_PLAYER_POS = (1800,850)
 
 
 # Initialize Pygame
@@ -40,35 +43,55 @@ SCREEN = pygame.display.set_mode((width, height))
 
 class Server:
     SERVER_IP = '127.0.0.1'
-    SERVER_PORT = 1393
 
     def __init__(self):
-        self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.playerSocket.connect((self.SERVER_IP, self.SERVER_PORT))
+        self.SERVER_PORT = 1393
+
+        self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_CONNECTING, None), (self.SERVER_IP, self.SERVER_PORT))
     
-    def RecvBySize(self):
+    def RecvMsg(self):
         try:
-            size = int(self.playerSocket.recv(protocol.BUFFER_LENGTH_SIZE).decode())  # get size
-            buffer = b''
-            while size:
-                new_bufffer = self.playerSocket.recv(size)
-                if not new_bufffer:
-                    return b''
-                buffer += new_bufffer
-                size -= len(new_bufffer)
+            buffer,_ = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
+            size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
+
+            buffer = buffer[protocol.BUFFER_LENGTH_SIZE:]
             
+            if size != len(buffer):
+                raise Exception("Data corrupted")
+
             return buffer
         except socket.error as e:
             print(f"socket does not exist, disconnecting it")
             return None
+
+
+    def WaitForGame(self):
+        # switching to new port
+        self.SERVER_PORT = int(self.RecvMsg().decode().split('~')[1])
+
+        msg_from_server = self.RecvMsg().decode().split('~')[0]
+        while not msg_from_server == protocol.STARTING_GAME:
+            msg_from_server = self.RecvMsg().decode().split('~')[0]
         
+
+    
+    
+    # we only need one bool to know where to place everyone
+    # this bool will indicate if we are the first or the second player
+    # if we are the first we will start at FIRST_PLAYER_POS and so for the second player
+    # if the bool is True we are the first player
+    def GetStartingPos(self) -> bool:
+        isFirstPlayer = int(self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:])
+
+        return isFirstPlayer
 
     def GameHandling(self, playerObject: physics.Object):
         pickleObject = pickle.dumps(playerObject)
-        self.playerSocket.send(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject))
+        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject), (self.SERVER_IP, self.SERVER_PORT))
 
-        secondPlayler = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
-        ball = self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:]
+        secondPlayler = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
+        ball = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
 
         return secondPlayler, ball
 
@@ -88,7 +111,7 @@ class Game:
         self.width = self.player.width
         self.height = self.player.height
 
-        #self.gameNetwork = Server()
+        self.gameNetwork = Server()
 
         self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         pygame.display.set_caption("Rocket League")
@@ -108,10 +131,10 @@ class Game:
         self.ball = physics.Ball(BALL_WEIGHT, (700, 200), BALL_RADIUS)
     
 
-    def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw):
+    def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw, car: physics.Object):
         image = pygame.transform.rotate(image, angle)
         image = pygame.transform.flip(image, flipObjectDraw, False) 
-        rect = image.get_rect(center=self.player.player_rect.center)
+        rect = image.get_rect(center=(car.xPlace + PLAYER_WIDTH / 2, car.yPlace + PLAYER_HEIGHT / 2))
         return image, rect
             
 
@@ -210,48 +233,56 @@ class Game:
         if ball != None:
             ballX, ballY = ball.xPlace, ball.yPlace
 
-        if secondPlayer != None and -self.bg_x + self.width > secondPlayerX > -self.bg_x and -self.bg_y + self.height > secondPlayerY > -self.bg_y:  # if on screen
+        if secondPlayer != None and (-self.bg_x + self.width > secondPlayerX > -self.bg_x or -self.bg_x + self.width > secondPlayerX + PLAYER_WIDTH > -self.bg_x)\
+              and (-self.bg_y + self.height > secondPlayerY > -self.bg_y or -self.bg_y + self.height > secondPlayerY + PLAYER_HEIGHT > -self.bg_y):  # if on screen
             secondPlayerImage = self.player.player_image
-            secondPlayerImage = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw)
-            self.screen.blit(secondPlayerImage, (secondPlayerX + self.bg_x, secondPlayerY + self.bg_y))
+            secondPlayerImage, rect = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw, secondPlayer)
+            self.screen.blit(secondPlayerImage, (rect.x + self.bg_x, rect.y + self.bg_y))
         
-        if -self.bg_x + self.width > ballX > -self.bg_x and -self.bg_y + self.height > ballY > -self.bg_y:
-            ballImage = pygame.transform.rotate(self.ballImage, self.ball.angle)
+        if (-self.bg_x + self.width > ballX > -self.bg_x or -self.bg_x + self.width > ballX + BALL_RADIUS > -self.bg_x)\
+              and (-self.bg_y + self.height > ballY > -self.bg_y or -self.bg_y + self.height > ballY + BALL_RADIUS > -self.bg_y):
+            ballImage = pygame.transform.rotate(self.ballImage, ball.angle)
             rect = ballImage.get_rect(center=(ballX + BALL_RADIUS, ballY + BALL_RADIUS))
             self.screen.blit(ballImage, (rect.x + self.bg_x, rect.y + self.bg_y))
 
 
-    def MainLoop(self):
+    def PutObjectInPlace(self, firstPlayer : bool) -> None:
+        if firstPlayer:
+            self.player.PlayerObject.xPlace = FIRST_PLAYER_POS[0]
+            self.player.PlayerObject.yPlace = FIRST_PLAYER_POS[1]
+        else:
+            self.player.PlayerObject.xPlace = SECOND_PLAYER_POS[0]
+            self.player.PlayerObject.yPlace = SECOND_PLAYER_POS[1]
+            self.player.PlayerObject.flipObjectDraw = True
 
-        """msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]
-        while not msg_from_server == protocol.STARTING_GAME:
-            msg_from_server = self.gameNetwork.RecvBySize().decode().split('~')[0]"""
+
+    def MainLoop(self):
+        
+        self.gameNetwork.WaitForGame()
+        isFirstPlayer = self.gameNetwork.GetStartingPos()
+        self.PutObjectInPlace(isFirstPlayer)
 
         secondPlayer, ball = None, None
 
         running = True
-        while running:
-            
-            
+        while running: 
             #for player in self.players:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            self.ball.CalculateBallPlace([self.player.PlayerObject])
-            #secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            #secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
+            secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
-            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw)
+            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw, self.player.PlayerObject)
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
             self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
 
             self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
-            self.DrawBallAndSecondPlayer(secondPlayer, self.ball)
-
+            self.DrawBallAndSecondPlayer(secondPlayer, ball)
 
             # Update the display
             pygame.display.update()
