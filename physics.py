@@ -203,6 +203,7 @@ class Object:
         
         return 0
 
+
     def CalculateMaxSpeed(self, xMax, yMax):
 
         MAX_SPEED_X = xMax * self.weight
@@ -214,6 +215,7 @@ class Object:
 
         self.xSpeed = MAX_SPEED_X if self.xSpeed > MAX_SPEED_X else -MAX_SPEED_X if self.xSpeed < -MAX_SPEED_X else self.xSpeed
         self.ySpeed = MAX_SPEED_Y * 2 if self.ySpeed > MAX_SPEED_Y * 2 else -MAX_SPEED_Y * 2 if self.ySpeed < -MAX_SPEED_Y * 2 else self.ySpeed
+
 
     # when jumping the player needs to sum the vectors in the right angle
     def __CalculateVectorsJump(self, PlayerTouchedControls):
@@ -521,55 +523,36 @@ class Ball(Object):
                 # all axis speed
 
                 m1 = rect.weight
-                v1 = rect.xSpeed * 2
-                if self.xSpeed != 0:
-                    v1 -= 500 * (self.xSpeed / abs(self.xSpeed))
+                v1 = math.sqrt(rect.xSpeed ** 2 + rect.ySpeed ** 2)
 
                 m2 = self.weight
-                v2 = self.xSpeed
+                v2 = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
 
                 u1 = v1 * ENERGY_LOSS
 
+                totalSpeed = ((m1*v1 + m2*v2 - m1 * u1) / m2) 
+
                 alpha = 0
-                if xDiff == 0:
-                    alpha = math.degrees(math.asin(yDiff / self.radius))
-                else:
-                    alpha = math.degrees(math.acos(xDiff / self.radius))
+                alpha = math.degrees(math.asin(-yDiff / self.radius))
 
-                # player is hitting the ball when he his higher
-                if yDiff > 0:
-                    alpha = 360 - alpha
+                if alpha == 0:
+                    alpha = math.degrees(math.asin(xDiff / self.radius))
 
-                # we need to prevent the two objects from overlapping
-                if distance < self.radius:
-                    xDistanceBall = self.radius * math.cos(math.radians(alpha))
-                    yDistanceBall = self.radius * math.sin(math.radians(alpha))
+                alpha = 360 + alpha if alpha < 0 else alpha
+                if xDiff < 0:
+                    alpha = 180 - alpha
+                
+                speedX = totalSpeed * math.cos(math.radians(alpha))
+                speedY = -totalSpeed * math.sin(math.radians(alpha))
 
-                    xCurrentBall = distance * math.cos(math.radians(alpha))
-                    yCurrentBall = distance * math.sin(math.radians(alpha))
-
-                    self.xPlace += (xDistanceBall - xCurrentBall)
-                    self.yPlace -= (yDistanceBall - yCurrentBall)
-
-                    finalSpeedX += (xDistanceBall - xCurrentBall) / REFRESH_RATE_TIME
-                    finalSpeedY -= (yDistanceBall - yCurrentBall) / REFRESH_RATE_TIME
-
-                # now we will find u2
-                finalSpeed = ((m1*v1 + m2*v2 - m1 * u1) / m2 * math.cos(math.radians(alpha)))
-
-                SpeedX = finalSpeed / math.cos(math.radians(alpha))
-                SpeedY = SpeedX * math.sin(math.radians(alpha))
-
-                if 90 >= alpha >= 0:
-                    SpeedY *= -1
-
-                finalSpeedX = finalSpeedX + SpeedX if SpeedX != 0 else finalSpeedX - self.xSpeed
-                finalSpeedY = finalSpeedY + SpeedY if SpeedY != 0 else finalSpeedY - self.ySpeed
+                finalSpeedX = finalSpeedX + speedX if speedX != 0 else finalSpeedX - self.xSpeed
+                finalSpeedY = finalSpeedY + speedY if speedY != 0 else finalSpeedY - self.ySpeed
 
 
         
         self.xSpeed = finalSpeedX if finalSpeedX != 0 else self.xSpeed
         self.ySpeed = finalSpeedY if finalSpeedY != 0 else self.ySpeed
+
 
     def BallBouncesPlayer(self, rect):
         colDetection, _, _ = self.BallRectCollision(rect)
@@ -580,6 +563,7 @@ class Ball(Object):
                 if not (self.yPlace + self.radius * 2 >= FLOOR_HEIGHT or self.yPlace <= CEILING_HEIGHT):
                     rect.ySpeed = -200
                     rect.xSpeed = 200
+
 
     def CalculateBallPlace(self, rect: list[Object]):
         #this function will be close to the object one, but because ball is not controlled by anyone, it will be slightly different
@@ -611,6 +595,6 @@ class Ball(Object):
         self.xVector = 0
         self.yVector = self.GRAVITY_FORCE_ACCELARATION
 
-        self.angle -= self.xSpeed / self.radius
+        self.angle = (self.angle - self.xSpeed / self.radius)  % 360
 
         
