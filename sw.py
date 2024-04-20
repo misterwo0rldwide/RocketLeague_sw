@@ -31,6 +31,7 @@ BALL_WEIGHT = 70
 
 FIRST_PLAYER_POS = (500, 850)
 SECOND_PLAYER_POS = (1800,850)
+BALL_STARTING_POS = (1200, 600)
 
 
 # Initialize Pygame
@@ -126,7 +127,7 @@ class Game:
         self.bg_x = 0
         self.bg_y = 0
 
-        self.ball = physics.Ball(BALL_WEIGHT, (700, 200), BALL_RADIUS)
+        self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw, car: physics.Object):
@@ -357,6 +358,8 @@ class Game:
         self.WaitFiveSeconds()
 
         secondPlayer, ball = None, None
+        firstPlayerGoals = 0
+        secondPlayerGoals = 0
 
         running = True
         endGameTime = time.time() + 120  # two minutes from now
@@ -380,18 +383,50 @@ class Game:
             self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, ball)
 
+            # print block so that player will see the stats
+            statsRect = pygame.Rect(self.width // 2 - 60, 0, 205, 60)
+            pygame.draw.rect(self.screen, (0,0,0), statsRect)
+
             timeLeft = int(endGameTime - time.time())
             minutes, seconds = divmod(timeLeft, 60)
             timeInStr = f'{minutes:02d}:{seconds:02d}'  # format for minutes and seconds
 
+            #print time
             text_surface, text_rect = self.render_text(timeInStr, font, colorOfTimer)
             self.screen.blit(text_surface, (self.width //2, 20))
+
+            # print goals
+            text_surface, text_rect = self.render_text(str(firstPlayerGoals), font, (255,255,255))
+            self.screen.blit(text_surface, (self.width //2 - 50, 20))
+
+            text_surface, text_rect = self.render_text(str(secondPlayerGoals), font, (255,255,255))
+            self.screen.blit(text_surface, (self.width //2 + 120, 20))
 
             # Update the display
             pygame.display.update()
 
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
+
+            if ball.inGoal:
+                self.WaitFiveSeconds()
+
+                if isFirstPlayer:
+                    self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = FIRST_PLAYER_POS
+                    self.player.PlayerObject.flipObjectDraw = False
+                else:
+                    self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = SECOND_PLAYER_POS
+                    self.player.PlayerObject.flipObjectDraw = False
+
+                if ball.xPlace > 1000:  # right goal
+                    firstPlayerGoals += 1
+                else:
+                    secondPlayerGoals += 1
+                
+                self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
+                endGameTime += 5  # the player waited five seconds so we add to the end time
+
+
 
 
     def FreePlayLoop(self):
@@ -420,6 +455,15 @@ class Game:
 
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
+
+            # if there is a goal
+            if self.ball.inGoal:
+                self.WaitFiveSeconds()
+                self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = FIRST_PLAYER_POS
+                self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
+                self.ball.xSpeed, self.ball.ySpeed = 0,0
+                self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
+
 
 
     def MainLoop(self):

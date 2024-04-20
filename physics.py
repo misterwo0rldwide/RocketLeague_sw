@@ -351,20 +351,30 @@ class Ball(Object):
         self.ObjectOnGround = False # ball starts from air
 
         self.angleSub = 0  # we need to know for printing the ball how much the ball need to spin
+        self.inGoal = False
     
 
     def BallBoundaries(self):
         self.ObjectOnGround = False
+        self.inGoal = False
 
         if self.xPlace <= LEFT_WALL:
-            self.xPlace = LEFT_WALL
-            self.xSpeed *= -1
-            self.ObjectOnGround = True
+            if self.yPlace >= 375 and self.yPlace + self.radius * 2 <= 750:
+                if self.xPlace <= LEFT_WALL - self.radius:
+                    self.inGoal = True
+            else:
+                self.xPlace = LEFT_WALL
+                self.xSpeed *= -1
+                self.ObjectOnGround = True
 
         elif self.xPlace >= RIGHT_WALL:
-            self.xPlace = RIGHT_WALL
-            self.xSpeed *= -1
-            self.ObjectOnGround = True
+            if self.yPlace >= 375 and self.yPlace + self.radius * 2 <= 750:
+                if self.xPlace >= RIGHT_WALL + self.radius:
+                    self.inGoal = True
+            else:
+                self.xPlace = RIGHT_WALL
+                self.xSpeed *= -1
+                self.ObjectOnGround = True
         
         if self.yPlace + self.radius >= FLOOR_HEIGHT:
             self.yPlace = FLOOR_HEIGHT - self.radius
@@ -385,15 +395,17 @@ class Ball(Object):
             onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffRightWall)
 
             if (onFloorRamp or onCeilingRamp) and xDiffRightWall > 20:
-                self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffRightWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffRightWall)
-                angle = self.GetObjectAngleOnSides(xDiffRightWall)
-                angle = 180 - angle if onFloorRamp else 180 + angle
+                if xDiffRightWall > DISTANCE_FROM__WALL + self.radius / 2:
+                    self.inGoal = True
+                else:
+                    self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffRightWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffRightWall)
+                    angle = self.GetObjectAngleOnSides(xDiffRightWall)
+                    angle = 180 - angle if onFloorRamp else 180 + angle
 
-                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
-                self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
-                self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
+                    totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
+                    self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
+                    self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
                 
-                return True
 
         
         elif (self.xPlace + self.radius) - LEFT_WALL < DISTANCE_FROM__WALL:  # left wall
@@ -402,15 +414,17 @@ class Ball(Object):
             onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffLeftWall)
             
             if onFloorRamp or onCeilingRamp and xDiffLeftWall > 20:
-                self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffLeftWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffLeftWall)
-                angle = self.GetObjectAngleOnSides(xDiffLeftWall)
-                angle = angle if onFloorRamp else 360 - angle
+                if xDiffLeftWall > DISTANCE_FROM__WALL + self.radius / 2:
+                    self.inGoal = True
+                else:
+                    self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffLeftWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffLeftWall)
+                    angle = self.GetObjectAngleOnSides(xDiffLeftWall)
+                    angle = angle if onFloorRamp else 360 - angle
 
-                totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
-                self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
-                self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
+                    totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
+                    self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
+                    self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
 
-                return True
 
 
     def __GetRotatedRectCoordinate(self, angle: float, currentX : float, centerX : float, currentY : float, centerY : float, rectFlipped) -> tuple[float, float]:

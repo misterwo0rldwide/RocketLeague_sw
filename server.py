@@ -55,6 +55,13 @@ class Match:
 
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, playerObject), self.player2Addr)
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), self.player2Addr)
+
+            if self.ball.inGoal:
+                time.sleep(5)
+                self.timeLeft += 5  # because the players wait five seconds
+                self.ball.xPlace, self.ball.ySpeed = BALL_STARTING_POS
+                self.ball.xSpeed, self.ball.ySpeed = 0,0
+
         
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.player2Addr)
