@@ -189,8 +189,7 @@ class Object:
             self.angle = 180
             self.flipObjectDraw = True if self.xSpeed >= 0 else False
             self.spinning = False
-
-
+            
 
     def CalculateFrictionOfObject(self, firction_force):
         # firstly for the object to have firction we need it to be on ground
@@ -443,7 +442,7 @@ class Ball(Object):
         return math.sqrt(xDiff ** 2 + yDiff ** 2)
 
 
-    def __BallRectCollision(self, rect : Object) -> tuple[bool, float, float]:
+    def BallRectCollision(self, rect : Object) -> tuple[bool, float, float]:
         rectCenterX = rect.xPlace + rect.width / 2
         rectCenterY = rect.yPlace + rect.height / 2
 
@@ -500,7 +499,7 @@ class Ball(Object):
 
         for rect in rects:
 
-            colDetection, coordiante, distance = self.__BallRectCollision(rect)
+            colDetection, coordiante, distance = self.BallRectCollision(rect)
             if colDetection:  # if indeed a collision
                 yDiff = (self.yPlace + self.radius) - coordiante[1]
                 xDiff = (self.xPlace + self.radius) - coordiante[0]
@@ -516,7 +515,6 @@ class Ball(Object):
                 v2 = self.xSpeed
 
                 u1 = v1 * ENERGY_LOSS
-                rect.xSpeed = u1
 
                 alpha = 0
                 if xDiff == 0:
@@ -527,9 +525,6 @@ class Ball(Object):
                 # player is hitting the ball when he his higher
                 if yDiff > 0:
                     alpha = 360 - alpha
-                    if self.yPlace + self.radius * 2 >= FLOOR_HEIGHT:
-                        rect.ySpeed = -200
-
 
                 # we need to prevent the two objects from overlapping
                 if distance < self.radius:
@@ -562,9 +557,15 @@ class Ball(Object):
         self.xSpeed = finalSpeedX if finalSpeedX != 0 else self.xSpeed
         self.ySpeed = finalSpeedY if finalSpeedY != 0 else self.ySpeed
 
-        return rects[0], rects[1]
-
-
+    def BallBouncesPlayer(self, rect):
+        colDetection, _, _ = self.BallRectCollision(rect)
+        if colDetection:
+            if self.ObjectOnGround:
+                rect.ySpeed = self.ySpeed * 2
+                # if ball not on floor or on ceiling - on ramps
+                if not (self.yPlace + self.radius * 2 >= FLOOR_HEIGHT or self.yPlace <= CEILING_HEIGHT):
+                    rect.ySpeed = -200
+                    rect.xSpeed = 200
 
     def CalculateBallPlace(self, rect: list[Object]):
         #this function will be close to the object one, but because ball is not controlled by anyone, it will be slightly different
@@ -573,7 +574,7 @@ class Ball(Object):
         angleSub = self.CalculateFrictionOfObject(FRICTION_FORCE_BALL_FK)
         self.angleSub = angleSub if angleSub != 0 else self.angleSub
         self.BallOnRamps()
-        rect1, rect2 = self.CollisionWithObject(rect)
+        self.CollisionWithObject(rect)
         
         self.xSpeed = self.xSpeed + self.xVector * REFRESH_RATE_TIME
         self.ySpeed = self.ySpeed + self.yVector * REFRESH_RATE_TIME
@@ -597,7 +598,5 @@ class Ball(Object):
         self.yVector = self.GRAVITY_FORCE_ACCELARATION
 
         self.angle -= self.xSpeed / self.radius
-
-        return rect1, rect2
 
         

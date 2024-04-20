@@ -34,7 +34,7 @@ class Match:
     def HandleGame(self):
 
         # each game is atlest two minutes
-        while time.time() - self.timeLeft < 120:
+        while time.time() - self.timeLeft < 125:
             
             msg1, addr1 = RecvMsg(self.server_socket_udp)
             msg1 = msg1[protocol.BUFFER_LENGTH_SIZE:]

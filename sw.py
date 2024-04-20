@@ -111,8 +111,6 @@ class Game:
         self.width = self.player.width
         self.height = self.player.height
 
-        self.gameNetwork = Server()
-
         self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         pygame.display.set_caption("Rocket League")
 
@@ -274,16 +272,88 @@ class Game:
             pygame.display.flip()
 
             t = time.time()
+    
+
+    def startScreen(self):
+        startScreen = pygame.image.load("startScreen.png").convert()
+        startScreen = pygame.transform.scale(startScreen, (self.width, self.height))
+        self.screen.blit(startScreen, (0,0))
+
+        pygame.display.flip()
+
+        run = True
+        while run:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                    run = False
+            
+
+    def menuScreen(self):
+        menuScreen = pygame.image.load('menu.png').convert()
+        menuScreen = pygame.transform.scale(menuScreen, (self.width, self.height))
+        self.screen.blit(menuScreen, (0,0))
+
+        pygame.display.flip()
+
+        originalMenuSize = (3840,2160)
+        originalGameRect = (1440, 480, 2350 - 1440, 1035 - 480)  # x, y, width, height
+        originalFreePlayRect = (1440, 1190, 2350 - 1440, 1680 - 1090)  # x, y, width, height
+        
+        # game rect sizes
+        x = self.width / (originalMenuSize[0] / originalGameRect[0])
+        y = self.height / (originalMenuSize[1] / originalGameRect[1])
+        width = self.width / (originalMenuSize[0] / originalGameRect[2])
+        height = self.height / (originalMenuSize[1] / originalGameRect[3])
+        gameRect = pygame.Rect(x, y, width, height)
+
+        # free play rect sizes
+        x = self.width / (originalMenuSize[0] / originalFreePlayRect[0])
+        y = self.height / (originalMenuSize[1] / originalFreePlayRect[1])
+        width = self.width / (originalMenuSize[0] / originalFreePlayRect[2])
+        height = self.height / (originalMenuSize[1] / originalFreePlayRect[3])
+        freePlayRect = pygame.Rect(x, y, width, height)
+
+        run = True
+        freePlay = False
+
+        while run:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    pos = pygame.mouse.get_pos()
+
+                    if gameRect.collidepoint(pos):
+                        run = False
+                    elif freePlayRect.collidepoint(pos):
+                        freePlay = True
+                        run = False
+        
+        return freePlay
 
 
-    def MainLoop(self):
+    def GameLoop(self):
         colorOfTimer = (255,215,0)
         font = pygame.font.Font(None, 50)
 
+
+        waitingScreen = pygame.image.load('waitingScreen.png').convert()
+        waitingScreen = pygame.transform.scale(waitingScreen, (self.width, self.height))
+
+        self.screen.blit(waitingScreen, (0,0))
+
+        pygame.display.flip()
+
+        self.gameNetwork = Server()
         self.gameNetwork.WaitForGame()
         isFirstPlayer = self.gameNetwork.GetStartingPos()
         self.PutObjectInPlace(isFirstPlayer)
 
+        self.screen.blit(self.background_image, (0,0))
         self.WaitFiveSeconds()
 
         secondPlayer, ball = None, None
@@ -297,6 +367,7 @@ class Game:
 
             secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
             secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
+            ball.BallBouncesPlayer(self.player.PlayerObject)
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
@@ -321,6 +392,44 @@ class Game:
 
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
+
+
+    def FreePlayLoop(self):
+        running = True
+        while running: 
+            #for player in self.players:
+            self.player.PlayerMotion()
+            self.width, self.height = self.player.width, self.player.height
+
+            self.ball.CalculateBallPlace([self.player.PlayerObject])
+            self.ball.BallBouncesPlayer(self.player.PlayerObject)
+
+            self.CorrectCameraView()  # get the camera right place
+            player_image = self.player.player_image
+            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw, self.player.PlayerObject)
+
+            # Draw everything
+            self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
+            self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, None)
+
+            self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
+            self.DrawBallAndSecondPlayer(None, self.ball)
+
+            # Update the display
+            pygame.display.update()
+
+            # Cap the frame rate
+            self.clock.tick(self.REFRESH_RATE)
+
+
+    def MainLoop(self):
+        self.startScreen()
+        isFreePlay = self.menuScreen()
+
+        if not isFreePlay:
+            self.GameLoop()
+        else:
+            self.FreePlayLoop()
 
 
 
