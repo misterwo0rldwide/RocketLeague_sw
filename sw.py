@@ -166,7 +166,7 @@ class Game:
         jumpX = xOfPlayerOnScreen + PLAYER_WIDTH / 2 + 5
         jumpY = yOfPlayerOnScreen - 45
         radius = 10
-        color = GREEN if not self.player.IsDoubleJumping else GRAY
+        color = GREEN if not self.player.PlayerObject.IsDoubleJumping else GRAY
 
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
@@ -519,9 +519,6 @@ class Player():
         self.accelrationX = 0
         self.accelrationY = 1
 
-        self.IsJumping = False
-        self.IsDoubleJumping = False
-
         self.PlayerTouchedControlrs = False
         self.IsBoosting = False
     
@@ -539,7 +536,7 @@ class Player():
         self.PlayerTouchedControlrs = False
 
         if self.PlayerObject.ObjectOnGround:
-            self.IsDoubleJumping = False
+            self.PlayerObject.IsDoubleJumping = False
 
         # Handle events
         for event in pygame.event.get():
@@ -593,10 +590,10 @@ class Player():
 
     def JumpingAction(self):
         if self.PlayerObject.ObjectOnGround:
-            self.IsJumping = True
-        elif not self.PlayerObject.ObjectOnGround and not self.IsDoubleJumping:
-            self.IsJumping = True
-            self.IsDoubleJumping = True
+            self.PlayerObject.IsJumping = True
+        elif not self.PlayerObject.ObjectOnGround and not self.PlayerObject.IsDoubleJumping:
+            self.PlayerObject.IsJumping = True
+            self.PlayerObject.IsDoubleJumping = True
 
     def PlayerMotion(self):
         
@@ -606,11 +603,11 @@ class Player():
 
         #print(self.accelrationX, self.accelrationY)
 
-        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.IsJumping, self.PlayerTouchedControlrs, self.IsBoosting)
+        self.PlayerObject.CalculateObjectPlace(self.accelrationX, self.accelrationY,self.PlayerObject.IsJumping, self.PlayerTouchedControlrs, self.IsBoosting)
         self.player_rect.x, self.player_rect.y = self.PlayerObject.xPlace, self.PlayerObject.yPlace
 
         isPlayerBoosting = self.IsBoosting
-        self.accelrationX,self.accelrationY, self.IsJumping, self.IsBoosting = 0,1,False, False
+        self.accelrationX,self.accelrationY, self.PlayerObject.IsJumping, self.IsBoosting = 0,1,False, False
         
 
 width, height = SCREEN.get_size()

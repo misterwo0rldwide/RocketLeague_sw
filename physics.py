@@ -51,6 +51,9 @@ class Object:
 
         self.IsBoosting = False
 
+        self.IsJumping = False
+        self.IsDoubleJumping = False
+
     def Function(self, x):
         return (x**2) / 100
     
@@ -530,6 +533,8 @@ class Ball(Object):
             if colDetection:  # if indeed a collision
                 if self.ObjectOnGround and not rect.ObjectOnGround:
                     rect.ySpeed = self.ySpeed * BOUNCE_POWER
+                    rect.IsJumping = False
+                    rect.IsDoubleJumping = False
 
                 yDiff = (self.yPlace + self.radius) - coordiante[1]
                 xDiff = (self.xPlace + self.radius) - coordiante[0]
@@ -569,7 +574,6 @@ class Ball(Object):
             boostSpeed = 20 * rect.weight
             rect.xSpeed = boostSpeed * math.cos(math.radians(angle))
             rect.ySpeed = -boostSpeed * math.sin(math.radians(angle))
-
                 
 
 
