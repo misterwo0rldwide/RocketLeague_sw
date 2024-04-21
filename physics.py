@@ -17,6 +17,8 @@ FRICTION_FORCE_BALL_FK = 0.6
 MAX_BOOST = 100
 ENERGY_LOSS = 0.6
 
+BOUNCE_POWER = 2.5
+
 # a class for rectangle objects
 class Object:
     def __init__(self,width:int,height:int,weight: int,statringPlace:tuple):
@@ -397,7 +399,7 @@ class Ball(Object):
             onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffRightWall)
 
             if (onFloorRamp or onCeilingRamp) and xDiffRightWall > 20:
-                if xDiffRightWall > DISTANCE_FROM__WALL + self.radius / 2:
+                if xDiffRightWall > DISTANCE_FROM__WALL + self.radius / 3:
                     self.inGoal = True
                 else:
                     self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffRightWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffRightWall)
@@ -407,6 +409,8 @@ class Ball(Object):
                     totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
                     self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
                     self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
+
+                    return angle
                 
 
         
@@ -416,7 +420,7 @@ class Ball(Object):
             onCeilingRamp = self.yPlace - CEILING_HEIGHT + self.radius <= self.Function(xDiffLeftWall)
             
             if onFloorRamp or onCeilingRamp and xDiffLeftWall > 20:
-                if xDiffLeftWall > DISTANCE_FROM__WALL + self.radius / 2:
+                if xDiffLeftWall > DISTANCE_FROM__WALL + self.radius / 3:
                     self.inGoal = True
                 else:
                     self.yPlace = FLOOR_HEIGHT - self.radius - self.Function(xDiffLeftWall) if onFloorRamp else CEILING_HEIGHT - self.radius + self.Function(xDiffLeftWall)
@@ -426,6 +430,8 @@ class Ball(Object):
                     totalSpeed = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2) / 2
                     self.xSpeed += (totalSpeed) / math.cos(math.radians(angle))
                     self.ySpeed -= (totalSpeed) / math.sin(math.radians(angle))
+
+                    return angle
 
 
 
@@ -473,7 +479,7 @@ class Ball(Object):
         if distance <= self.radius:
             return True, topLeftCornerCoordinate, distance
         
-        topRightCornerCoordinate = self.__GetRotatedRectCoordinate(rect.angle, rect.xPlace + rect.width, rectCenterX, rect.yPlace, rectCenterY, rect.flipObjectDraw)
+        topRightCornerCoordinate = self.__GetRotatedRectCoordinate(rect.angle, rect.xPlace + rect.width, rectCenterX, rect.yPlace + 5, rectCenterY, rect.flipObjectDraw)
         distance = self.__BallCoordianteDistance(topRightCornerCoordinate)
         if distance <= self.radius:
             return True, topRightCornerCoordinate, distance
@@ -501,6 +507,15 @@ class Ball(Object):
         return False, (0,0), 0
 
 
+    # when ball and player overlapp we need to seperate them they dont go into one another
+    def PreventOverLappingBallRect(self, alpha : float, xDiff, yDiff):
+
+        xAdd = self.radius * math.cos(math.radians(alpha)) - xDiff
+        yAdd = self.radius * math.sin(math.radians(alpha)) + yDiff
+
+        self.xPlace += xAdd
+        self.yPlace -= yAdd
+
 
     # we will need collision with objects for this one
     # because more than one object can hit the balls we will get a list of all the objects
@@ -509,19 +524,17 @@ class Ball(Object):
         # we will use attack and momentuem equation which is m1 * v1 + m2 * v2 = m1 * u1 + m2 * u2 * cos(a)
         # where v is the speed before and u is the speed after
 
-        # because there are many object we will just sum up all their powers
-        finalSpeedX = 0
-        finalSpeedY = 0
-
         for rect in rects:
 
             colDetection, coordiante, distance = self.BallRectCollision(rect)
             if colDetection:  # if indeed a collision
+                if self.ObjectOnGround and not rect.ObjectOnGround:
+                    rect.ySpeed = self.ySpeed * BOUNCE_POWER
+
                 yDiff = (self.yPlace + self.radius) - coordiante[1]
                 xDiff = (self.xPlace + self.radius) - coordiante[0]
 
                 # all axis speed
-
                 m1 = rect.weight
                 v1 = math.sqrt(rect.xSpeed ** 2 + rect.ySpeed ** 2)
 
@@ -533,36 +546,31 @@ class Ball(Object):
                 totalSpeed = ((m1*v1 + m2*v2 - m1 * u1) / m2) 
 
                 alpha = 0
-                alpha = math.degrees(math.asin(-yDiff / self.radius))
+                alpha = math.degrees(math.asin(-yDiff / distance))
 
                 if alpha == 0:
-                    alpha = math.degrees(math.asin(xDiff / self.radius))
+                    alpha = math.degrees(math.acos(xDiff / distance))
 
                 alpha = 360 + alpha if alpha < 0 else alpha
-                if xDiff < 0:
+                if xDiff < 0 and alpha != 180:
                     alpha = 180 - alpha
                 
-                speedX = totalSpeed * math.cos(math.radians(alpha))
-                speedY = -totalSpeed * math.sin(math.radians(alpha))
+                self.xSpeed += totalSpeed * math.cos(math.radians(alpha))
+                self.ySpeed -= totalSpeed * math.sin(math.radians(alpha))
 
-                finalSpeedX = finalSpeedX + speedX if speedX != 0 else finalSpeedX - self.xSpeed
-                finalSpeedY = finalSpeedY + speedY if speedY != 0 else finalSpeedY - self.ySpeed
-
-
-        
-        self.xSpeed = finalSpeedX if finalSpeedX != 0 else self.xSpeed
-        self.ySpeed = finalSpeedY if finalSpeedY != 0 else self.ySpeed
+                self.PreventOverLappingBallRect(alpha, xDiff, yDiff)
+                self.BallBouncesPlayer(rect)
 
 
-    def BallBouncesPlayer(self, rect):
-        colDetection, _, _ = self.BallRectCollision(rect)
-        if colDetection:
-            if self.ObjectOnGround:
-                rect.ySpeed = self.ySpeed * 2
-                # if ball not on floor or on ceiling - on ramps
-                if not (self.yPlace + self.radius * 2 >= FLOOR_HEIGHT or self.yPlace <= CEILING_HEIGHT):
-                    rect.ySpeed = -200
-                    rect.xSpeed = 200
+    def BallBouncesPlayer(self, rect : Object):
+        angle = self.BallOnRamps()
+        # if the object is not on ramps it will return None
+        if angle is not None:
+            boostSpeed = 20 * rect.weight
+            rect.xSpeed = boostSpeed * math.cos(math.radians(angle))
+            rect.ySpeed = -boostSpeed * math.sin(math.radians(angle))
+
+                
 
 
     def CalculateBallPlace(self, rect: list[Object]):

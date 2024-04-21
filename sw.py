@@ -50,6 +50,8 @@ class Server:
 
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_CONNECTING, None), (self.SERVER_IP, self.SERVER_PORT))
+
+        self.gameEnded = False
     
     def RecvMsg(self):
         try:
@@ -60,6 +62,9 @@ class Server:
             
             if size != len(buffer):
                 raise Exception("Data corrupted")
+            
+            if buffer[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.GAME_ENDED:
+                self.gameEnded = True
 
             return buffer
         except socket.error as e:
@@ -92,9 +97,10 @@ class Server:
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject), (self.SERVER_IP, self.SERVER_PORT))
 
         secondPlayler = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
+        player = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
         ball = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
 
-        return secondPlayler, ball
+        return secondPlayler, player, ball
 
 
 
@@ -368,9 +374,9 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            secondPlayer, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            secondPlayer, ball = pickle.loads(secondPlayer), pickle.loads(ball)
-            ball.BallBouncesPlayer(self.player.PlayerObject)
+            secondPlayer,player, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            secondPlayer, self.player.PlayerObject , ball = pickle.loads(secondPlayer),  pickle.loads(player) ,pickle.loads(ball)
+            
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
@@ -416,7 +422,7 @@ class Game:
                     self.player.PlayerObject.flipObjectDraw = False
                 else:
                     self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = SECOND_PLAYER_POS
-                    self.player.PlayerObject.flipObjectDraw = False
+                    self.player.PlayerObject.flipObjectDraw = True
 
                 if ball.xPlace > 1000:  # right goal
                     firstPlayerGoals += 1
@@ -425,6 +431,9 @@ class Game:
                 
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 endGameTime += 5  # the player waited five seconds so we add to the end time
+            
+            if timeLeft <= 0 or self.gameNetwork.gameEnded:
+                running = False
 
 
 
@@ -436,8 +445,11 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
+            keys=pygame.key.get_pressed()
+            if keys[K_ESCAPE]:
+                running = False
+
             self.ball.CalculateBallPlace([self.player.PlayerObject])
-            self.ball.BallBouncesPlayer(self.player.PlayerObject)
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
@@ -462,18 +474,27 @@ class Game:
                 self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = FIRST_PLAYER_POS
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
+                self.player.PlayerObject.flipObjectDraw = False
                 self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
 
 
 
     def MainLoop(self):
         self.startScreen()
-        isFreePlay = self.menuScreen()
 
-        if not isFreePlay:
-            self.GameLoop()
-        else:
-            self.FreePlayLoop()
+        while True:
+            isFreePlay = self.menuScreen()
+
+            if not isFreePlay:
+                self.GameLoop()
+            else:
+                self.FreePlayLoop()
+            
+            width, height = SCREEN.get_size()
+            self.player = Player(width, height)
+            self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
+            self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0,0
+
 
 
 

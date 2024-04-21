@@ -27,14 +27,14 @@ class Match:
 
         self.ballX, self.ballY = BALL_STARTING_POS[0], BALL_STARTING_POS[1]
         self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
-
-        self.timeLeft = time.time()  # get the starting game time
     
 
     def HandleGame(self):
 
         # each game is atlest two minutes
-        while time.time() - self.timeLeft < 125:
+        running = True
+        timeLeft = time.time()  # get the starting game time
+        while running:
             
             msg1, addr1 = RecvMsg(self.server_socket_udp)
             msg1 = msg1[protocol.BUFFER_LENGTH_SIZE:]
@@ -51,20 +51,29 @@ class Match:
             ball = pickle.dumps(self.ball)
 
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player2Object), self.playerAddr)
+            self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, playerObject), self.playerAddr)
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), self.playerAddr)
 
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, playerObject), self.player2Addr)
+            self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player2Object), self.player2Addr)
             self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), self.player2Addr)
 
             if self.ball.inGoal:
                 time.sleep(5)
-                self.timeLeft += 5  # because the players wait five seconds
+                timeLeft += 5  # because the players wait five seconds
                 self.ball.xPlace, self.ball.ySpeed = BALL_STARTING_POS
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
+
+            currentTime = time.time()
+            if currentTime - timeLeft > 124:
+                running = False
 
         
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.player2Addr)
+
+        print(f'game ended - player1-{self.playerAddr}, player2{self.player2Addr}')
+        self.server_socket_udp.close()
 
 
     def Lunching(self):
