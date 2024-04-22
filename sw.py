@@ -354,9 +354,11 @@ class Game:
         self.screen.blit(waitingScreen, (0,0))
 
         pygame.display.flip()
-
+        music = pygame.mixer.music.load('menuMusic.mp3')
+        pygame.mixer.music.play()
         self.gameNetwork = Server()
         self.gameNetwork.WaitForGame()
+        pygame.mixer.music.stop()
         isFirstPlayer = self.gameNetwork.GetStartingPos()
         self.PutObjectInPlace(isFirstPlayer)
 
