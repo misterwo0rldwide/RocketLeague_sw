@@ -574,6 +574,8 @@ class Ball(Object):
             boostSpeed = 20 * rect.weight
             rect.xSpeed = boostSpeed * math.cos(math.radians(angle))
             rect.ySpeed = -boostSpeed * math.sin(math.radians(angle))
+            rect.IsJumping = False
+            rect.IsDoubleJumping = False
                 
 
 

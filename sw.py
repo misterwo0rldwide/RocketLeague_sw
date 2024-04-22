@@ -355,7 +355,7 @@ class Game:
 
         pygame.display.flip()
         music = pygame.mixer.music.load('menuMusic.mp3')
-        pygame.mixer.music.play()
+        pygame.mixer.music.play(loops=-1)
         self.gameNetwork = Server()
         self.gameNetwork.WaitForGame()
         pygame.mixer.music.stop()
@@ -371,6 +371,8 @@ class Game:
 
         running = True
         endGameTime = time.time() + 120  # two minutes from now
+        music = pygame.mixer.music.load('gameMusic.mp3')
+        pygame.mixer.music.play(-1)
         while running: 
             #for player in self.players:
             self.player.PlayerMotion()
@@ -436,12 +438,16 @@ class Game:
             
             if timeLeft <= 0 or self.gameNetwork.gameEnded:
                 running = False
+            
+        pygame.mixer.music.stop()
 
 
 
 
     def FreePlayLoop(self):
         running = True
+        music = pygame.mixer.music.load('gameMusic.mp3')
+        pygame.mixer.music.play(-1)
         while running: 
             #for player in self.players:
             self.player.PlayerMotion()
@@ -478,6 +484,8 @@ class Game:
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
                 self.player.PlayerObject.flipObjectDraw = False
                 self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
+        
+        pygame.mixer.music.stop()
 
 
 
