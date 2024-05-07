@@ -58,6 +58,10 @@ class Server:
         self.playerSocket.settimeout(2)
 
         self.gameEnded = False
+        self.gameEndedEnt = False
+
+        # we will send the server every few seconds that the client is still connected
+        self.clientConnected = time.time()
     
 
     def RecvMsg(self):
@@ -72,10 +76,13 @@ class Server:
             
             if buffer[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.GAME_ENDED:
                 self.gameEnded = True
+            
+            if buffer[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.GAME_STOPPED_ENTHERNET:
+                self.gameEndedEnt = True
 
             return buffer
         except socket.error as e:
-            return None
+            return b""
         
 
     # for using tcp
@@ -117,17 +124,23 @@ class Server:
         return isFirstPlayer
 
     def GameHandling(self, playerObject: physics.Object):
+        
+        if time.time() - self.clientConnected > 5:
+            self.clientConnected = time.time()
+            self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
+        
+        
         pickleObject = pickle.dumps(playerObject)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject), (self.SERVER_IP, self.SERVER_PORT))
 
         secondPlayler = self.RecvMsg()
-        if secondPlayler is not None:
+        if secondPlayler != b"":
             secondPlayler = secondPlayler[protocol.BUFFER_LENGTH_SIZE:]
         player = self.RecvMsg()
-        if player is not None:
+        if player != b"":
             player = player[protocol.BUFFER_LENGTH_SIZE:]
         ball = self.RecvMsg()
-        if ball is not None:
+        if ball != b"":
             ball = ball[protocol.BUFFER_LENGTH_SIZE:]
 
         return secondPlayler, player, ball
@@ -245,7 +258,7 @@ class Game:
                         boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
                         pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
             
-        if len(self.secondplayerboostSprites) > 0 and secondPlayer != None:
+        if secondPlayer != None and len(self.secondplayerboostSprites) > 0:
             for index, boostRow in enumerate(self.secondplayerboostSprites):
                 boostTime = time.time() - boostRow[0]
                 if boostTime > 0.5:  # kill the boost row
@@ -263,18 +276,20 @@ class Game:
     def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
         
         secondPlayerX,secondPlayerY = 0,0
-        if secondPlayer != None:
+        secondPlayerObject = secondPlayer != None and secondPlayer != b""
+        ballObject = ball != None and ball != b""
+        if secondPlayerObject:
             secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
-        if ball != None:
+        if ballObject:
             ballX, ballY = ball.xPlace, ball.yPlace
 
-        if secondPlayer != None and (-self.bg_x + self.width > secondPlayerX > -self.bg_x or -self.bg_x + self.width > secondPlayerX + PLAYER_WIDTH > -self.bg_x)\
+        if secondPlayerObject and (-self.bg_x + self.width > secondPlayerX > -self.bg_x or -self.bg_x + self.width > secondPlayerX + PLAYER_WIDTH > -self.bg_x)\
               and (-self.bg_y + self.height > secondPlayerY > -self.bg_y or -self.bg_y + self.height > secondPlayerY + PLAYER_HEIGHT > -self.bg_y):  # if on screen
             secondPlayerImage = self.player.player_image
             secondPlayerImage, rect = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw, secondPlayer)
             self.screen.blit(secondPlayerImage, (rect.x + self.bg_x, rect.y + self.bg_y))
         
-        if (-self.bg_x + self.width > ballX > -self.bg_x or -self.bg_x + self.width > ballX + BALL_RADIUS > -self.bg_x)\
+        if ballObject and (-self.bg_x + self.width > ballX > -self.bg_x or -self.bg_x + self.width > ballX + BALL_RADIUS > -self.bg_x)\
               and (-self.bg_y + self.height > ballY > -self.bg_y or -self.bg_y + self.height > ballY + BALL_RADIUS > -self.bg_y):
             ballImage = pygame.transform.rotate(self.ballImage, ball.angle)
             rect = ballImage.get_rect(center=(ballX + BALL_RADIUS, ballY + BALL_RADIUS))
@@ -410,16 +425,15 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            second,player, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            if second != None:
+            second,playerTemp, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            if second != b"":
                 secondPlayer = pickle.loads(second)
-            if player != None:
-                
-                player = pickle.loads(player)
+            if playerTemp != b"":
+                player = pickle.loads(playerTemp)
                 
                 self.player.PlayerObject = player
                 
-            if ball != None:
+            if ball != b"":
                 ball = pickle.loads(ball)
             
 
@@ -459,7 +473,7 @@ class Game:
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
 
-            if ball != None and ball.inGoal:
+            if ball != None and ball != b"" and ball.inGoal:
                 self.WaitFiveSeconds()
 
                 if isFirstPlayer:
@@ -476,8 +490,12 @@ class Game:
                 
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 endGameTime += 5  # the player waited five seconds so we add to the end time
+
+            keys=pygame.key.get_pressed()
+            if keys[K_ESCAPE]:
+                running = False
             
-            if timeLeft <= 0 or self.gameNetwork.gameEnded:
+            if timeLeft <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
                 running = False
             
         pygame.mixer.music.stop()

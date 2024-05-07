@@ -34,6 +34,12 @@ class Match:
 
         self.ballX, self.ballY = BALL_STARTING_POS[0], BALL_STARTING_POS[1]
         self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
+
+        self.firstPlayerConnected = False
+        self.secondPlayerConnected = False
+
+        self.firstPlayerTimeConnected = time.time()
+        self.secondPlayerTimeConnected = time.time()
     
 
     def HandleGame(self):
@@ -41,18 +47,28 @@ class Match:
         # each game is atleast two minutes
         running = True
         timeLeft = time.time()  # get the starting game time
+        retMsg = protocol.GAME_ENDED
 
         time.sleep(5)
         while running:
             
             msg1, addr1 = RecvMsg(self.server_socket_udp)
             if not (msg1 == "" and addr1 == ""):
+                if msg1[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.PLAYER_STILL_CONNECTED:
+                    self.firstPlayerConnected = True
+                    msg1, addr1 = RecvMsg(self.server_socket_udp)
+
                 msg1 = msg1[protocol.BUFFER_LENGTH_SIZE:]
+
             msg2, addr2 = RecvMsg(self.server_socket_udp)
             if not (msg2 == "" and addr2 == ""):
+                if msg2[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.PLAYER_STILL_CONNECTED:
+                    self.secondPlayerConnected = True
+                    msg2, addr2 = RecvMsg(self.server_socket_udp)
+
                 msg2 = msg2[protocol.BUFFER_LENGTH_SIZE:]
 
-            if msg1 != "" and msg2 != "":    
+            if msg1 != "" and msg2 != "":
                 playerObject = pickle.loads(msg1) if addr1 == self.playerAddr else pickle.loads(msg2)
                 player2Object = pickle.loads(msg2) if addr2 == self.player2Addr else pickle.loads(msg1)
                 
@@ -76,16 +92,35 @@ class Match:
             if self.ball.inGoal:
                 time.sleep(5)
                 timeLeft += 5  # because the players wait five seconds
+                self.firstPlayerTimeConnected += 5
+                self.secondPlayerTimeConnected += 5
                 self.ball.xPlace, self.ball.ySpeed = BALL_STARTING_POS
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
+            
+            if self.firstPlayerConnected:
+                self.firstPlayerTimeConnected = time.time()
+            else:
+                if time.time() - self.firstPlayerTimeConnected > 6:  # if one of the players is not connected
+                    running = False
+                    retMsg = protocol.GAME_STOPPED_ENTHERNET
+            
+            if self.secondPlayerConnected:
+                self.secondPlayerTimeConnected = time.time()
+            else:
+                if time.time() - self.secondPlayerTimeConnected > 6:
+                    running = False
+                    retMsg = protocol.GAME_STOPPED_ENTHERNET
+            
+            self.firstPlayerConnected = False
+            self.secondPlayerConnected = False
 
             currentTime = time.time()
             if currentTime - timeLeft > 124:
                 running = False
-
+                
         
-        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.playerAddr)
-        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.GAME_ENDED, None), self.player2Addr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.player2Addr)
 
         print(f'game ended - player1-{self.playerAddr}, player2{self.player2Addr}')
         self.server_socket_udp.close()
@@ -138,20 +173,39 @@ def RecvMsg(sock) -> tuple:
 
         return buffer, addr
     except socket.error as e:
-        print(e)
         return "", ""
+
+
+# gets a list of clients
+# check if each of the client is connected
+# if not removes it
+def check_client_connected(clients: list[socket.socket]):
+
+    for sock in clients:
+        
+        sock.settimeout(0.1)
+        try:
+            sock.recv(1)
+        except ConnectionError as e:
+            # if got to here it means the socket does not longer exists
+            clients.remove(sock)
+        except socket.timeout as e:
+            pass
 
 
 def HandlePlayers(server_socket_tcp : socket):
     prevClient = ''
     prevAddr = ''
-    playersConnected = 0  # amount of players that have connected
+    currentClient = []
+
 
     while True:
         client, addr = server_socket_tcp.accept()
         
-        playersConnected += 1
-        if playersConnected % 2 == 0:  # new match added - 2 players exist
+        currentClient.append(client)
+        check_client_connected(currentClient)
+
+        if len(currentClient) % 2 == 0:  # new match added - 2 players exist
             new_server_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             new_server_socket.bind((IP, 0))
             port = str(new_server_socket.getsockname()[1])
@@ -162,6 +216,9 @@ def HandlePlayers(server_socket_tcp : socket):
             game = Match(new_server_socket)
             t = threading.Thread(target=game.Lunching, args=())  # start game
             t.start()
+
+            currentClient.remove(prevClient)
+            currentClient.remove(client)
 
             print(f'new game started - player1-{prevAddr}, player2{addr}')
 
