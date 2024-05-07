@@ -43,16 +43,23 @@ SCREEN = pygame.display.set_mode((width, height))
 
 
 class Server:
-    SERVER_IP = '127.0.0.1'
+    SERVER_IP = '10.100.102.103'
 
     def __init__(self):
         self.SERVER_PORT = 1393
 
+        self.tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.tcpSocket.connect((self.SERVER_IP, self.SERVER_PORT))
+
+        self.SERVER_PORT = int(self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:])
+
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_CONNECTING, None), (self.SERVER_IP, self.SERVER_PORT))
+        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
+        self.playerSocket.settimeout(2)
 
         self.gameEnded = False
     
+
     def RecvMsg(self):
         try:
             buffer,_ = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
@@ -68,27 +75,44 @@ class Server:
 
             return buffer
         except socket.error as e:
-            print(f"socket does not exist, disconnecting it")
             return None
-
-
-    def WaitForGame(self):
-        # switching to new port
-        self.SERVER_PORT = int(self.RecvMsg().decode().split('~')[1])
-
-        msg_from_server = self.RecvMsg().decode().split('~')[0]
-        while not msg_from_server == protocol.STARTING_GAME:
-            msg_from_server = self.RecvMsg().decode().split('~')[0]
         
 
-    
+    # for using tcp
+    def RecvBySize(self):
+        try:
+            dataLength = int(self.tcpSocket.recv(4).decode())
+            buffer = self.tcpSocket.recv(dataLength)
+            
+            lengthMsg = len(buffer)
+            while lengthMsg != dataLength:
+                buffer += self.tcpSocket.recv(dataLength - lengthMsg)
+                lengthMsg = len(buffer)
+            
+            return buffer
+
+        except Exception as e:
+            print(e)
+            return b""
     
     # we only need one bool to know where to place everyone
     # this bool will indicate if we are the first or the second player
     # if we are the first we will start at FIRST_PLAYER_POS and so for the second player
     # if the bool is True we are the first player
     def GetStartingPos(self) -> bool:
-        isFirstPlayer = int(self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:])
+        startingGameMsg = self.RecvMsg()
+
+        while True:
+            try:
+                msg = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
+                msg = int(msg)
+                self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
+                break
+            except Exception as e:
+                self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_NOT_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
+        
+        
+        isFirstPlayer = msg
 
         return isFirstPlayer
 
@@ -96,9 +120,15 @@ class Server:
         pickleObject = pickle.dumps(playerObject)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject), (self.SERVER_IP, self.SERVER_PORT))
 
-        secondPlayler = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
-        player = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
-        ball = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
+        secondPlayler = self.RecvMsg()
+        if secondPlayler is not None:
+            secondPlayler = secondPlayler[protocol.BUFFER_LENGTH_SIZE:]
+        player = self.RecvMsg()
+        if player is not None:
+            player = player[protocol.BUFFER_LENGTH_SIZE:]
+        ball = self.RecvMsg()
+        if ball is not None:
+            ball = ball[protocol.BUFFER_LENGTH_SIZE:]
 
         return secondPlayler, player, ball
 
@@ -357,10 +387,12 @@ class Game:
         music = pygame.mixer.music.load('menuMusic.mp3')
         pygame.mixer.music.play(loops=-1)
         self.gameNetwork = Server()
-        self.gameNetwork.WaitForGame()
-        pygame.mixer.music.stop()
         isFirstPlayer = self.gameNetwork.GetStartingPos()
+        pygame.mixer.music.stop()
         self.PutObjectInPlace(isFirstPlayer)
+        
+        secondPlayerPlace = SECOND_PLAYER_POS if isFirstPlayer else FIRST_PLAYER_POS
+        secondPlayer = physics.Object(PLAYER_WIDTH, PLAYER_HEIGHT, 100, secondPlayerPlace)
 
         self.screen.blit(self.background_image, (0,0))
         self.WaitFiveSeconds()
@@ -378,8 +410,17 @@ class Game:
             self.player.PlayerMotion()
             self.width, self.height = self.player.width, self.player.height
 
-            secondPlayer,player, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            secondPlayer, self.player.PlayerObject , ball = pickle.loads(secondPlayer),  pickle.loads(player) ,pickle.loads(ball)
+            second,player, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
+            if second != None:
+                secondPlayer = pickle.loads(second)
+            if player != None:
+                
+                player = pickle.loads(player)
+                
+                self.player.PlayerObject = player
+                
+            if ball != None:
+                ball = pickle.loads(ball)
             
 
             self.CorrectCameraView()  # get the camera right place
@@ -388,7 +429,7 @@ class Game:
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
-            self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, secondPlayer)
+            self.DrawPlayerEssntials(player.xPlace + self.bg_x, player.yPlace + self.bg_y, secondPlayer)
 
             self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
             self.DrawBallAndSecondPlayer(secondPlayer, ball)
@@ -418,7 +459,7 @@ class Game:
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
 
-            if ball.inGoal:
+            if ball != None and ball.inGoal:
                 self.WaitFiveSeconds()
 
                 if isFirstPlayer:
