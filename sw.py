@@ -523,6 +523,7 @@ class Game:
                 
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 endGameTime += 5  # the player waited five seconds so we add to the end time
+                self.player.PlayerObject.boostAmount = 100
 
             keys=pygame.key.get_pressed()
             if keys[K_ESCAPE]:
@@ -662,7 +663,7 @@ class Player():
 
 
         # because the player usually presses the boost and not tapping it will not be as an event so we need to check it manually
-        if self.joystick != 0 and self.joystick.get_button(1):
+        if self.joystick != 0 and self.joystick.get_button(1) and self.PlayerObject.boostAmount != 0:
             self.IsBoosting = True
 
         
@@ -689,7 +690,7 @@ class Player():
             self.accelrationY = -1
             self.PlayerTouchedControlrs = True
         # because going down is just as only gravity working we dont need to check if player going down
-        if keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]:
+        if (keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]) and self.PlayerObject.boostAmount != 0:
             self.IsBoosting = True
 
     def JumpingAction(self):

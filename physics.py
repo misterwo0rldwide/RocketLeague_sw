@@ -276,7 +276,7 @@ class Object:
 
 
     def __PlayerBoosting(self):
-        if self.boostAmount > 0:
+        if self.boostAmount > 1:
             # firstly we will calculate the totalVector of the boost
 
             totalVector = math.sqrt(self.xVector ** 2 + self.yVector ** 2) * 0.8
@@ -304,7 +304,9 @@ class Object:
         if self.IsBoosting:
             self.__PlayerBoosting()
         else:
-            self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
+            if self.ObjectOnGround and self.boostAmount < 100:
+                self.boostAmount += 1
+            #self.boostAmount = self.boostAmount + 1 if self.ObjectOnGround and self.boostAmount < 100 else self.boostAmount
 
         self.__HandleCeiling()
 
@@ -576,6 +578,7 @@ class Ball(Object):
             rect.ySpeed = -boostSpeed * math.sin(math.radians(angle))
             rect.IsJumping = False
             rect.IsDoubleJumping = False
+            rect.boostAmount += 20
                 
 
 
