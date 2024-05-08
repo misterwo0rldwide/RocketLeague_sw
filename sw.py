@@ -70,6 +70,10 @@ class Server:
                         self.nullObject = True
                         self.tcpSocket.close()
                         return
+            
+            if self.buffer == 0:
+                self.nullObject = True
+                return
 
         self.SERVER_PORT = int(self.buffer[protocol.BUFFER_LENGTH_SIZE:])
 
@@ -106,7 +110,10 @@ class Server:
                 self.gameEndedEnt = True
 
             return buffer
-        except socket.error as e:
+        except ConnectionResetError as e:
+            self.gameEndedEnt = True
+            return b""
+        except socket.timeout as e:
             return b""
         
 
@@ -124,8 +131,8 @@ class Server:
             self.buffer = buffer
 
         except Exception as e:
-            print(e)
-            return b""
+            self.buffer = 0
+            self.tcpSocket.close()
     
     # we only need one bool to know where to place everyone
     # this bool will indicate if we are the first or the second player
