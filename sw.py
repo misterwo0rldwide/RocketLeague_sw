@@ -388,6 +388,39 @@ class Game:
         return freePlay
 
 
+    def endGame(self, timeLeft, firstPlayerGoals, secondPlayerGoals, isFirstPlayer):
+                # if game ended properly
+        if self.gameNetwork.gameEnded or timeLeft <= 0:
+            if isFirstPlayer and firstPlayerGoals >= secondPlayerGoals:
+                winScreen = pygame.image.load('win.jpg').convert()
+                winScreen = pygame.transform.scale(winScreen, (self.width, self.height))
+                self.screen.blit(winScreen, (0,0))
+            
+            elif (not isFirstPlayer) and secondPlayerGoals >= firstPlayerGoals:
+                winScreen = pygame.image.load('win.jpg').convert()
+                winScreen = pygame.transform.scale(winScreen, (self.width, self.height))
+                self.screen.blit(winScreen, (0,0))
+            
+            else:
+                lostScreen = pygame.image.load('lost.jpg').convert()
+                lostScreen = pygame.transform.scale(lostScreen, (self.width, self.height))
+                self.screen.blit(lostScreen, (0,0))
+            
+            pygame.display.flip()
+
+            time.sleep(5)
+        
+        # if game ended due to internter issues
+        if self.gameNetwork.gameEndedEnt:
+            internetScreen = pygame.image.load('error.jpg').convert()
+            internetScreen = pygame.transform.scale(internetScreen, (self.width, self.height))
+            self.screen.blit(internetScreen, (0,0))
+
+            pygame.display.flip()
+
+            time.sleep(5)
+
+
     def GameLoop(self):
         colorOfTimer = (255,215,0)
         font = pygame.font.Font(None, 50)
@@ -497,6 +530,8 @@ class Game:
             
             if timeLeft <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
                 running = False
+        
+        self.endGame(int(endGameTime - time.time()), firstPlayerGoals, secondPlayerGoals, isFirstPlayer)
             
         pygame.mixer.music.stop()
 
