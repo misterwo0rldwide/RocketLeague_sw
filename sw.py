@@ -9,6 +9,7 @@ import time
 import socket
 import pickle
 import protocol
+import threading
 
 
 RIGHT_WALL_BACKGROUND = 2497
@@ -48,10 +49,29 @@ class Server:
     def __init__(self):
         self.SERVER_PORT = 1393
 
-        self.tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.tcpSocket.connect((self.SERVER_IP, self.SERVER_PORT))
+        try:
+            self.tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.tcpSocket.connect((self.SERVER_IP, self.SERVER_PORT))
+        
+        except Exception as e:
+            print("server is not running...")
+            self.nullObject = True
+            self.tcpSocket.close()
+            return
 
-        self.SERVER_PORT = int(self.RecvBySize()[protocol.BUFFER_LENGTH_SIZE:])
+        self.buffer = ""
+
+        t = threading.Thread(target=self.RecvBySize, args=())
+        t.start()
+        while self.buffer == "":
+            for event in pygame.event.get():
+                if event.type == KEYDOWN:
+                    if event.key == K_ESCAPE:
+                        self.nullObject = True
+                        self.tcpSocket.close()
+                        return
+
+        self.SERVER_PORT = int(self.buffer[protocol.BUFFER_LENGTH_SIZE:])
 
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
@@ -62,6 +82,11 @@ class Server:
 
         # we will send the server every few seconds that the client is still connected
         self.clientConnected = time.time()
+
+        # the object did manage to connect to the server
+        self.nullObject = False
+
+        self.first_player = False
     
 
     def RecvMsg(self):
@@ -96,7 +121,7 @@ class Server:
                 buffer += self.tcpSocket.recv(dataLength - lengthMsg)
                 lengthMsg = len(buffer)
             
-            return buffer
+            self.buffer = buffer
 
         except Exception as e:
             print(e)
@@ -106,7 +131,7 @@ class Server:
     # this bool will indicate if we are the first or the second player
     # if we are the first we will start at FIRST_PLAYER_POS and so for the second player
     # if the bool is True we are the first player
-    def GetStartingPos(self) -> bool:
+    def GetStartingPos(self):
         startingGameMsg = self.RecvMsg()
 
         while True:
@@ -119,9 +144,7 @@ class Server:
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_NOT_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
         
         
-        isFirstPlayer = msg
-
-        return isFirstPlayer
+        self.first_player = msg
 
     def GameHandling(self, playerObject: physics.Object):
         
@@ -177,6 +200,8 @@ class Game:
         self.bg_y = 0
 
         self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
+
+        self.input_wait = False
     
 
     def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw, car: physics.Object):
@@ -231,7 +256,7 @@ class Game:
             self.boostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
             self.boostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
         
-        if secondPlayer != None and secondPlayer.IsBoosting and secondPlayer.boostAmount:
+        if type(secondPlayer) == physics.Object and secondPlayer.IsBoosting and secondPlayer.boostAmount:
             amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
 
             angle = secondPlayer.angle if not secondPlayer.flipObjectDraw else 180 - secondPlayer.angle
@@ -258,7 +283,7 @@ class Game:
                         boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
                         pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
             
-        if secondPlayer != None and len(self.secondplayerboostSprites) > 0:
+        if type(secondPlayer) == physics.Object and len(self.secondplayerboostSprites) > 0:
             for index, boostRow in enumerate(self.secondplayerboostSprites):
                 boostTime = time.time() - boostRow[0]
                 if boostTime > 0.5:  # kill the boost row
@@ -276,8 +301,8 @@ class Game:
     def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
         
         secondPlayerX,secondPlayerY = 0,0
-        secondPlayerObject = secondPlayer != None and secondPlayer != b""
-        ballObject = ball != None and ball != b""
+        secondPlayerObject = type(secondPlayer) == physics.Object
+        ballObject = type(ball) == physics.Ball
         if secondPlayerObject:
             secondPlayerX, secondPlayerY = secondPlayer.xPlace, secondPlayer.yPlace
         if ballObject:
@@ -433,13 +458,21 @@ class Game:
 
         pygame.display.flip()
         music = pygame.mixer.music.load('menuMusic.mp3')
+
         pygame.mixer.music.play(loops=-1)
         self.gameNetwork = Server()
-        isFirstPlayer = self.gameNetwork.GetStartingPos()
-        pygame.mixer.music.stop()
-        self.PutObjectInPlace(isFirstPlayer)
+
+        if self.gameNetwork.nullObject:
+            pygame.mixer.music.stop()
+            del self.gameNetwork
+            return
         
-        secondPlayerPlace = SECOND_PLAYER_POS if isFirstPlayer else FIRST_PLAYER_POS
+        self.gameNetwork.GetStartingPos()
+        pygame.mixer.music.stop()
+
+        self.PutObjectInPlace(self.gameNetwork.first_player)
+        
+        secondPlayerPlace = SECOND_PLAYER_POS if self.gameNetwork.first_player else FIRST_PLAYER_POS
         secondPlayer = physics.Object(PLAYER_WIDTH, PLAYER_HEIGHT, 100, secondPlayerPlace)
 
         self.screen.blit(self.background_image, (0,0))
@@ -506,10 +539,10 @@ class Game:
             # Cap the frame rate
             self.clock.tick(self.REFRESH_RATE)
 
-            if ball != None and ball != b"" and ball.inGoal:
+            if type(ball) == physics.Ball and ball.inGoal:
                 self.WaitFiveSeconds()
 
-                if isFirstPlayer:
+                if self.gameNetwork.first_player:
                     self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = FIRST_PLAYER_POS
                     self.player.PlayerObject.flipObjectDraw = False
                 else:
@@ -532,9 +565,10 @@ class Game:
             if timeLeft <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
                 running = False
         
-        self.endGame(int(endGameTime - time.time()), firstPlayerGoals, secondPlayerGoals, isFirstPlayer)
-            
+
         pygame.mixer.music.stop()
+        
+        self.endGame(int(endGameTime - time.time()), firstPlayerGoals, secondPlayerGoals, self.gameNetwork.first_player)
 
 
 

@@ -42,6 +42,11 @@ class Match:
         self.secondPlayerTimeConnected = time.time()
     
 
+    def send_game_data(self, addr, secondPlayerData, firstPlayerData, ball):
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, secondPlayerData), addr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, firstPlayerData), addr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), addr)
+
     def HandleGame(self):
 
         # each game is atleast two minutes
@@ -68,9 +73,16 @@ class Match:
 
                 msg2 = msg2[protocol.BUFFER_LENGTH_SIZE:]
 
-            if msg1 != "" and msg2 != "":
-                playerObject = pickle.loads(msg1) if addr1 == self.playerAddr else pickle.loads(msg2)
-                player2Object = pickle.loads(msg2) if addr2 == self.player2Addr else pickle.loads(msg1)
+            if msg1 != "" or msg2 != "":
+                if addr1 == self.playerAddr and msg1 != "":
+                    playerObject = pickle.loads(msg1)
+                elif msg2 != "":
+                    playerObject = pickle.loads(msg2)
+
+                if addr2 == self.player2Addr and msg2 != "":
+                    player2Object = pickle.loads(msg2)
+                elif msg1 != "":
+                    player2Object = pickle.loads(msg1)
                 
                 self.ball.CalculateBallPlace([playerObject, player2Object])
                 
@@ -78,13 +90,8 @@ class Match:
                 player2Object = pickle.dumps(player2Object)
                 ball = pickle.dumps(self.ball)
                 
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player2Object), self.playerAddr)
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, playerObject), self.playerAddr)
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), self.playerAddr)
-
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, playerObject), self.player2Addr)
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player2Object), self.player2Addr)
-                self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), self.player2Addr)
+                self.send_game_data(self.playerAddr, player2Object, playerObject, ball)
+                self.send_game_data(self.player2Addr, playerObject, player2Object, ball)
             else:
                 playerObject = None
                 player2Object = None
@@ -107,7 +114,7 @@ class Match:
             if self.secondPlayerConnected:
                 self.secondPlayerTimeConnected = time.time()
             else:
-                if time.time() - self.secondPlayerTimeConnected > 6:
+                if time.time() - self.secondPlayerTimeConnected > 10:
                     running = False
                     retMsg = protocol.GAME_STOPPED_ENTHERNET
             
