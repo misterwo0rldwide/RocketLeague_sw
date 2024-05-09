@@ -40,82 +40,94 @@ class Match:
 
         self.firstPlayerTimeConnected = time.time()
         self.secondPlayerTimeConnected = time.time()
-    
+
+        self.firstPlayerData = None
+        self.secondPlayerData = None
 
     def send_game_data(self, addr, secondPlayerData, firstPlayerData, ball):
-        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, secondPlayerData), addr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SECOND_PLAYER_INFO, secondPlayerData), addr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, firstPlayerData), addr)
-        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, ball), addr)
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.BALL_INFO, ball), addr)
+    
+    
+    def recv_game_data(self):
+        msg1, addr1 = RecvMsg(self.server_socket_udp)
+        msg2, addr2 = RecvMsg(self.server_socket_udp)
+        ls = [(msg1, addr1), (msg2, addr2)]
+
+        for msg, addr in ls:
+
+            # if we got message and not socket timeout
+            if msg != "":
+                msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
+                msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
+
+                # if the player sent that he is still connected to the game
+                if msg_command == protocol.PLAYER_STILL_CONNECTED:
+                    
+                    if addr == self.playerAddr:
+                        self.firstPlayerConnected = True
+                    else:
+                        self.secondPlayerConnected = True
+
+                    msg1, addr1 = RecvMsg(self.server_socket_udp)
+                    ls.append((msg1, addr1))
+                
+                elif msg_command == protocol.PLAYER_INFO:
+                    if addr == self.playerAddr:
+                        self.firstPlayerData = msg_info
+                    elif addr == self.player2Addr:
+                        self.secondPlayerData = msg_info
+
+
+
 
     def HandleGame(self):
 
         # each game is atleast two minutes
-        running = True
+        self.running = True
         timeLeft = time.time()  # get the starting game time
         retMsg = protocol.GAME_ENDED
+        ball = None
 
         time.sleep(5)
-        while running:
+        while self.running:
+            self.recv_game_data()
+
+            first_player = pickle.loads(self.firstPlayerData) if self.firstPlayerData != None else self.firstPlayerData
+            second_player = pickle.loads(self.secondPlayerData) if self.secondPlayerData != None else self.secondPlayerData
             
-            msg1, addr1 = RecvMsg(self.server_socket_udp)
-            if not (msg1 == "" and addr1 == ""):
-                if msg1[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.PLAYER_STILL_CONNECTED:
-                    self.firstPlayerConnected = True
-                    msg1, addr1 = RecvMsg(self.server_socket_udp)
+            self.ball.CalculateBallPlace([first_player, second_player])
 
-                msg1 = msg1[protocol.BUFFER_LENGTH_SIZE:]
+            first_player = pickle.dumps(first_player)
+            second_player = pickle.dumps(second_player)
+            ball = pickle.dumps(self.ball)
 
-            msg2, addr2 = RecvMsg(self.server_socket_udp)
-            if not (msg2 == "" and addr2 == ""):
-                if msg2[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.PLAYER_STILL_CONNECTED:
-                    self.secondPlayerConnected = True
-                    msg2, addr2 = RecvMsg(self.server_socket_udp)
+            self.send_game_data(self.playerAddr, second_player, first_player, ball)
+            self.send_game_data(self.player2Addr, first_player, second_player, ball)
 
-                msg2 = msg2[protocol.BUFFER_LENGTH_SIZE:]
-
-            if msg1 != "" or msg2 != "":
-                if addr1 == self.playerAddr and msg1 != "":
-                    playerObject = pickle.loads(msg1)
-                elif msg2 != "":
-                    playerObject = pickle.loads(msg2)
-
-                if addr2 == self.player2Addr and msg2 != "":
-                    player2Object = pickle.loads(msg2)
-                elif msg1 != "":
-                    player2Object = pickle.loads(msg1)
-                
-                self.ball.CalculateBallPlace([playerObject, player2Object])
-                
-                playerObject = pickle.dumps(playerObject)
-                player2Object = pickle.dumps(player2Object)
-                ball = pickle.dumps(self.ball)
-                
-                self.send_game_data(self.playerAddr, player2Object, playerObject, ball)
-                self.send_game_data(self.player2Addr, playerObject, player2Object, ball)
-            else:
-                playerObject = None
-                player2Object = None
 
             if self.ball.inGoal:
-                time.sleep(5)
                 timeLeft += 5  # because the players wait five seconds
                 self.firstPlayerTimeConnected += 5
                 self.secondPlayerTimeConnected += 5
                 self.ball.xPlace, self.ball.ySpeed = BALL_STARTING_POS
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
+                self.recv_game_data()
+                time.sleep(5)
             
             if self.firstPlayerConnected:
                 self.firstPlayerTimeConnected = time.time()
             else:
                 if time.time() - self.firstPlayerTimeConnected > 6:  # if one of the players is not connected
-                    running = False
+                    self.running = False
                     retMsg = protocol.GAME_STOPPED_ENTHERNET
             
             if self.secondPlayerConnected:
                 self.secondPlayerTimeConnected = time.time()
             else:
-                if time.time() - self.secondPlayerTimeConnected > 10:
-                    running = False
+                if time.time() - self.secondPlayerTimeConnected > 6:
+                    self.running = False
                     retMsg = protocol.GAME_STOPPED_ENTHERNET
             
             self.firstPlayerConnected = False
@@ -123,7 +135,7 @@ class Match:
 
             currentTime = time.time()
             if currentTime - timeLeft > 124:
-                running = False
+                self.running = False
                 
         
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)

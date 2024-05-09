@@ -530,43 +530,44 @@ class Ball(Object):
         # where v is the speed before and u is the speed after
 
         for rect in rects:
+            
+            if type(rect) == Object:
+                colDetection, coordiante, distance = self.BallRectCollision(rect)
+                if colDetection:  # if indeed a collision
+                    if self.ObjectOnGround and not rect.ObjectOnGround:
+                        rect.ySpeed = self.ySpeed * BOUNCE_POWER
+                        rect.IsJumping = False
+                        rect.IsDoubleJumping = False
 
-            colDetection, coordiante, distance = self.BallRectCollision(rect)
-            if colDetection:  # if indeed a collision
-                if self.ObjectOnGround and not rect.ObjectOnGround:
-                    rect.ySpeed = self.ySpeed * BOUNCE_POWER
-                    rect.IsJumping = False
-                    rect.IsDoubleJumping = False
+                    yDiff = (self.yPlace + self.radius) - coordiante[1]
+                    xDiff = (self.xPlace + self.radius) - coordiante[0]
 
-                yDiff = (self.yPlace + self.radius) - coordiante[1]
-                xDiff = (self.xPlace + self.radius) - coordiante[0]
+                    # all axis speed
+                    m1 = rect.weight
+                    v1 = math.sqrt(rect.xSpeed ** 2 + rect.ySpeed ** 2)
 
-                # all axis speed
-                m1 = rect.weight
-                v1 = math.sqrt(rect.xSpeed ** 2 + rect.ySpeed ** 2)
+                    m2 = self.weight
+                    v2 = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
 
-                m2 = self.weight
-                v2 = math.sqrt(self.xSpeed ** 2 + self.ySpeed ** 2)
+                    u1 = v1 * ENERGY_LOSS
 
-                u1 = v1 * ENERGY_LOSS
+                    totalSpeed = ((m1*v1 + m2*v2 - m1 * u1) / m2) 
 
-                totalSpeed = ((m1*v1 + m2*v2 - m1 * u1) / m2) 
+                    alpha = 0
+                    alpha = math.degrees(math.asin(-yDiff / distance))
 
-                alpha = 0
-                alpha = math.degrees(math.asin(-yDiff / distance))
+                    if alpha == 0:
+                        alpha = math.degrees(math.acos(xDiff / distance))
 
-                if alpha == 0:
-                    alpha = math.degrees(math.acos(xDiff / distance))
+                    alpha = 360 + alpha if alpha < 0 else alpha
+                    if xDiff < 0 and alpha != 180:
+                        alpha = 180 - alpha
+                    
+                    self.xSpeed += totalSpeed * math.cos(math.radians(alpha))
+                    self.ySpeed -= totalSpeed * math.sin(math.radians(alpha))
 
-                alpha = 360 + alpha if alpha < 0 else alpha
-                if xDiff < 0 and alpha != 180:
-                    alpha = 180 - alpha
-                
-                self.xSpeed += totalSpeed * math.cos(math.radians(alpha))
-                self.ySpeed -= totalSpeed * math.sin(math.radians(alpha))
-
-                self.PreventOverLappingBallRect(alpha, xDiff, yDiff)
-                self.BallBouncesPlayer(rect)
+                    self.PreventOverLappingBallRect(alpha, xDiff, yDiff)
+                    self.BallBouncesPlayer(rect)
 
 
     def BallBouncesPlayer(self, rect : Object):

@@ -79,7 +79,7 @@ class Server:
 
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
-        self.playerSocket.settimeout(2)
+        self.playerSocket.settimeout(0.1)
 
         self.gameEnded = False
         self.gameEndedEnt = False
@@ -91,6 +91,10 @@ class Server:
         self.nullObject = False
 
         self.first_player = False
+
+        self.player_object = None
+        self.second_player_object = None
+        self.ball_object = None
     
 
     def RecvMsg(self):
@@ -153,27 +157,39 @@ class Server:
         
         self.first_player = msg
 
-    def GameHandling(self, playerObject: physics.Object):
-        
+    def GameHandling(self):
         if time.time() - self.clientConnected > 5:
             self.clientConnected = time.time()
             self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
         
+
+        msg1 = self.RecvMsg()
+        msg2 = self.RecvMsg()
+        msg3 = self.RecvMsg()
+
+        for msg in [msg1, msg2, msg3]:
+            if msg != "":
+                msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
+                msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
+
+                if msg_info != b"":
+
+                    if msg_command == protocol.GAME_STOPPED_ENTHERNET:
+                        self.gameEndedEnt = True
+                    elif msg_command == protocol.GAME_ENDED:
+                        self.gameEnded = True
+                    
+                    elif msg_command == protocol.PLAYER_INFO:
+                        self.player_object = pickle.loads(msg_info)
+                    elif msg_command == protocol.SECOND_PLAYER_INFO:
+                        self.second_player_object = pickle.loads(msg_info)
+                    elif msg_command == protocol.BALL_INFO:
+                        self.ball_object = pickle.loads(msg_info)
         
-        pickleObject = pickle.dumps(playerObject)
-        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, pickleObject), (self.SERVER_IP, self.SERVER_PORT))
-
-        secondPlayler = self.RecvMsg()
-        if secondPlayler != b"":
-            secondPlayler = secondPlayler[protocol.BUFFER_LENGTH_SIZE:]
-        player = self.RecvMsg()
-        if player != b"":
-            player = player[protocol.BUFFER_LENGTH_SIZE:]
-        ball = self.RecvMsg()
-        if ball != b"":
-            ball = ball[protocol.BUFFER_LENGTH_SIZE:]
-
-        return secondPlayler, player, ball
+    
+    def send_player(self, player_object : physics.Object):
+        player = pickle.dumps(player_object)
+        self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player), (self.SERVER_IP, self.SERVER_PORT))
 
 
 
@@ -478,14 +494,10 @@ class Game:
         pygame.mixer.music.stop()
 
         self.PutObjectInPlace(self.gameNetwork.first_player)
-        
-        secondPlayerPlace = SECOND_PLAYER_POS if self.gameNetwork.first_player else FIRST_PLAYER_POS
-        secondPlayer = physics.Object(PLAYER_WIDTH, PLAYER_HEIGHT, 100, secondPlayerPlace)
 
         self.screen.blit(self.background_image, (0,0))
         self.WaitFiveSeconds()
 
-        secondPlayer, ball = None, None
         firstPlayerGoals = 0
         secondPlayerGoals = 0
 
@@ -493,22 +505,17 @@ class Game:
         endGameTime = time.time() + 120  # two minutes from now
         music = pygame.mixer.music.load('gameMusic.mp3')
         pygame.mixer.music.play(-1)
-        while running: 
-            #for player in self.players:
-            self.player.PlayerMotion()
-            self.width, self.height = self.player.width, self.player.height
 
-            second,playerTemp, ball = self.gameNetwork.GameHandling(self.player.PlayerObject)
-            if second != b"":
-                secondPlayer = pickle.loads(second)
-            if playerTemp != b"":
-                player = pickle.loads(playerTemp)
-                
-                self.player.PlayerObject = player
-                
-            if ball != b"":
-                ball = pickle.loads(ball)
-            
+        while running:
+            self.gameNetwork.GameHandling()
+
+            self.player.PlayerObject = self.gameNetwork.player_object if self.gameNetwork.player_object != None and self.gameNetwork.player_object != "" else self.player.PlayerObject
+            second_player = self.gameNetwork.second_player_object
+            ball = self.gameNetwork.ball_object
+
+            self.player.PlayerMotion()
+            self.gameNetwork.send_player(self.player.PlayerObject)
+            self.width, self.height = self.player.width, self.player.height
 
             self.CorrectCameraView()  # get the camera right place
             player_image = self.player.player_image
@@ -516,10 +523,10 @@ class Game:
 
             # Draw everything
             self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
-            self.DrawPlayerEssntials(player.xPlace + self.bg_x, player.yPlace + self.bg_y, secondPlayer)
+            self.DrawPlayerEssntials(self.player.PlayerObject.xPlace + self.bg_x, self.player.PlayerObject.yPlace + self.bg_y, second_player)
 
             self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
-            self.DrawBallAndSecondPlayer(secondPlayer, ball)
+            self.DrawBallAndSecondPlayer(second_player, ball)
 
             # print block so that player will see the stats
             statsRect = pygame.Rect(self.width // 2 - 60, 0, 205, 60)
@@ -547,8 +554,6 @@ class Game:
             self.clock.tick(self.REFRESH_RATE)
 
             if type(ball) == physics.Ball and ball.inGoal:
-                self.WaitFiveSeconds()
-
                 if self.gameNetwork.first_player:
                     self.player.PlayerObject.xPlace, self.player.PlayerObject.yPlace = FIRST_PLAYER_POS
                     self.player.PlayerObject.flipObjectDraw = False
@@ -564,6 +569,9 @@ class Game:
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 endGameTime += 5  # the player waited five seconds so we add to the end time
                 self.player.PlayerObject.boostAmount = 100
+
+                self.gameNetwork.send_player(self.player.PlayerObject)
+                self.WaitFiveSeconds()
 
             keys=pygame.key.get_pressed()
             if keys[K_ESCAPE]:

@@ -1,12 +1,13 @@
 PLAYER_CONNECTING = 'PCN'
 PLAYER_INFO = 'PNF'
+SECOND_PLAYER_INFO = 'SNF'
+BALL_INFO = 'BIO'
 PLAYER_STARTING_POS = 'PSP'
 
 STARTING_GAME = 'STG'
 
 MSG_CORRUPTED = 'MSC'
 
-MESSAGE_ACK = 'ACK'
 GAME_STOPPED_ENTHERNET = 'GSE'
 GAME_ENDED = 'GEN'
 
@@ -25,7 +26,7 @@ MAX_MESSAGE_LENGTH = 1024
 def BuildMsgProtocol(command, data):
     if type(command) != bytes:
         command = command.encode()
-    if not data is None and type(data) != bytes:
+    if (not data is None) and type(data) != bytes:
         data = data.encode()
     elif data is None:
         data = b''
