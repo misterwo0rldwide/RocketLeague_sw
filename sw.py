@@ -700,7 +700,13 @@ class Player():
                 self.joystick = pygame.joystick.Joystick(0)
             if event.type == JOYDEVICEREMOVED:
                 self.joystick = 0
-
+            if event.type == pygame.MOUSEMOTION and not self.PlayerObject.ObjectOnGround:
+                mouse_position = pygame.mouse.get_pos()
+                xDiff = (mouse_position[0] - self.PlayerObject.xPlace) / (self.width / 2)
+                yDiff = (mouse_position[1] - self.PlayerObject.yPlace) / (self.height / 2)
+                self.accelrationX = xDiff
+                self.accelrationY = yDiff
+                self.PlayerTouchedControlrs = True
             
             # if game was resized
             if event.type == pygame.WINDOWRESIZED:
@@ -709,6 +715,10 @@ class Player():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
+
+        keys = pygame.key.get_pressed()
+        if (keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]) and self.PlayerObject.boostAmount != 0:
+            self.IsBoosting = True
 
 
         # because the player usually presses the boost and not tapping it will not be as an event so we need to check it manually
@@ -729,13 +739,13 @@ class Player():
 
         keys = pygame.key.get_pressed()  # get the keys which are pressed
         
-        if keys[pygame.K_LEFT]:
+        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
             self.accelrationX = -1
             self.PlayerTouchedControlrs = True
-        if keys[pygame.K_RIGHT]:
+        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
             self.accelrationX = 1
             self.PlayerTouchedControlrs = True
-        if keys[pygame.K_UP]:
+        if keys[pygame.K_UP] or keys[pygame.K_w]:
             self.accelrationY = -1
             self.PlayerTouchedControlrs = True
         # because going down is just as only gravity working we dont need to check if player going down
