@@ -95,6 +95,8 @@ class Server:
         self.player_object = None
         self.second_player_object = None
         self.ball_object = None
+
+        self.running = True
     
 
     def RecvMsg(self):
@@ -158,33 +160,30 @@ class Server:
         self.first_player = msg
 
     def GameHandling(self):
-        if time.time() - self.clientConnected > 5:
-            self.clientConnected = time.time()
-            self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
-        
 
-        msg1 = self.RecvMsg()
-        msg2 = self.RecvMsg()
-        msg3 = self.RecvMsg()
+        while not (self.gameEnded or self.gameEndedEnt or not self.running):
+            if time.time() - self.clientConnected > 5:
+                self.clientConnected = time.time()
+                self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
+            
 
-        for msg in [msg1, msg2, msg3]:
-            if msg != "":
-                msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
-                msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
+            msg = self.RecvMsg()
+            msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
+            msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
 
-                if msg_info != b"":
+            if msg_info != b"":
 
-                    if msg_command == protocol.GAME_STOPPED_ENTHERNET:
-                        self.gameEndedEnt = True
-                    elif msg_command == protocol.GAME_ENDED:
-                        self.gameEnded = True
-                    
-                    elif msg_command == protocol.PLAYER_INFO:
-                        self.player_object = pickle.loads(msg_info)
-                    elif msg_command == protocol.SECOND_PLAYER_INFO:
-                        self.second_player_object = pickle.loads(msg_info)
-                    elif msg_command == protocol.BALL_INFO:
-                        self.ball_object = pickle.loads(msg_info)
+                if msg_command == protocol.GAME_STOPPED_ENTHERNET:
+                    self.gameEndedEnt = True
+                elif msg_command == protocol.GAME_ENDED:
+                    self.gameEnded = True
+                
+                elif msg_command == protocol.PLAYER_INFO:
+                    self.player_object = pickle.loads(msg_info)
+                elif msg_command == protocol.SECOND_PLAYER_INFO:
+                    self.second_player_object = pickle.loads(msg_info)
+                elif msg_command == protocol.BALL_INFO:
+                    self.ball_object = pickle.loads(msg_info)
         
     
     def send_player(self, player_object : physics.Object):
@@ -506,9 +505,9 @@ class Game:
         music = pygame.mixer.music.load('gameMusic.mp3')
         pygame.mixer.music.play(-1)
 
-        while running:
-            self.gameNetwork.GameHandling()
-
+        th = threading.Thread(target=self.gameNetwork.GameHandling, args=())
+        th.start()
+        while self.gameNetwork.running:
             self.player.PlayerObject = self.gameNetwork.player_object if self.gameNetwork.player_object != None and self.gameNetwork.player_object != "" else self.player.PlayerObject
             second_player = self.gameNetwork.second_player_object
             ball = self.gameNetwork.ball_object
@@ -569,18 +568,20 @@ class Game:
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
                 endGameTime += 5  # the player waited five seconds so we add to the end time
                 self.player.PlayerObject.boostAmount = 100
+                self.gameNetwork.ball_object.inGoal = False
 
                 self.gameNetwork.send_player(self.player.PlayerObject)
                 self.WaitFiveSeconds()
 
             keys=pygame.key.get_pressed()
             if keys[K_ESCAPE]:
-                running = False
+                self.gameNetwork.running = False
+                
             
             if timeLeft <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
-                running = False
+                self.gameNetwork.running = False
         
-
+        th.join()
         pygame.mixer.music.stop()
         
         self.endGame(int(endGameTime - time.time()), firstPlayerGoals, secondPlayerGoals, self.gameNetwork.first_player)

@@ -25,12 +25,18 @@ class Match:
         self.server_socket_udp.settimeout(1)
 
         msg, addr = RecvMsg(self.server_socket_udp)
-        if msg.decode()[:-1] == protocol.JOINING_GAME:
-            self.playerAddr = addr
+        while len(msg) == 0 or msg.decode()[:-1] != protocol.JOINING_GAME:
+            msg, addr = RecvMsg(self.server_socket_udp)
+
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
+        self.playerAddr = addr
         
         msg, addr = RecvMsg(self.server_socket_udp)
-        if msg.decode()[:-1] == protocol.JOINING_GAME:
-            self.player2Addr = addr
+        while len(msg) == 0 or msg.decode()[:-1] != protocol.JOINING_GAME:
+            msg, addr = RecvMsg(self.server_socket_udp)
+
+        self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
+        self.player2Addr = addr
 
         self.ballX, self.ballY = BALL_STARTING_POS[0], BALL_STARTING_POS[1]
         self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
@@ -162,16 +168,16 @@ class Match:
         while True:
             if not player1GotData:
                 msg1, addr = RecvMsg(self.server_socket_udp)
-                if msg1 != "" and msg1.decode() == protocol.MSG_NOT_RECIVED:
+                if msg1 != "" and msg1.decode()[:-1] == protocol.MSG_NOT_RECIVED:
                     self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                elif msg1.decode()[:-1] == protocol.MSG_RECIVED:
+                elif msg1 != "" and msg1.decode()[:-1] == protocol.MSG_RECIVED:
                     player1GotData = True
             
             if not player2GotData:
                 msg2, addr = RecvMsg(self.server_socket_udp)
-                if msg2 != "" and msg2.decode() == protocol.MSG_NOT_RECIVED:
+                if msg2 != "" and msg2.decode()[:-1] == protocol.MSG_NOT_RECIVED:
                     self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                elif msg2.decode()[:-1] == protocol.MSG_RECIVED:
+                elif msg2 != "" and msg2.decode()[:-1] == protocol.MSG_RECIVED:
                     player2GotData = True
             
             if player1GotData and player2GotData:
