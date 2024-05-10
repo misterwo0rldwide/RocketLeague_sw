@@ -61,7 +61,7 @@ class Server:
 
         self.buffer = ""
 
-        t = threading.Thread(target=self.RecvBySize, args=())
+        t = threading.Thread(target=self.recv_by_size, args=())
         t.start()
         while self.buffer == "":
             for event in pygame.event.get():
@@ -99,7 +99,7 @@ class Server:
         self.running = True
     
 
-    def RecvMsg(self):
+    def recv_msg(self):
         try:
             buffer,_ = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
             size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
@@ -124,7 +124,7 @@ class Server:
         
 
     # for using tcp
-    def RecvBySize(self):
+    def recv_by_size(self):
         try:
             dataLength = int(self.tcpSocket.recv(4).decode())
             buffer = self.tcpSocket.recv(dataLength)
@@ -144,12 +144,12 @@ class Server:
     # this bool will indicate if we are the first or the second player
     # if we are the first we will start at FIRST_PLAYER_POS and so for the second player
     # if the bool is True we are the first player
-    def GetStartingPos(self):
-        startingGameMsg = self.RecvMsg()
+    def get_starting_pos(self):
+        self.recv_msg()
 
         while True:
             try:
-                msg = self.RecvMsg()[protocol.BUFFER_LENGTH_SIZE:]
+                msg = self.recv_msg()[protocol.BUFFER_LENGTH_SIZE:]
                 msg = int(msg)
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
                 break
@@ -159,15 +159,15 @@ class Server:
         
         self.first_player = msg
 
-    def GameHandling(self):
+
+    def game_handle(self):
 
         while not (self.gameEnded or self.gameEndedEnt or not self.running):
             if time.time() - self.clientConnected > 5:
                 self.clientConnected = time.time()
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
-            
 
-            msg = self.RecvMsg()
+            msg = self.recv_msg()
             msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
             msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
 
@@ -189,8 +189,9 @@ class Server:
     def send_player(self, player_object : physics.Object):
         player = pickle.dumps(player_object)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player), (self.SERVER_IP, self.SERVER_PORT))
-
-
+    
+    def close_game(self):
+        self.playerSocket.close()
 
 
 class Game:
@@ -226,14 +227,14 @@ class Game:
         self.input_wait = False
     
 
-    def ChangePlayerPictureWithAngle(self, image, angle, flipObjectDraw, car: physics.Object):
+    def change_player_picture_with_angle(self, image, angle, flipObjectDraw, car: physics.Object):
         image = pygame.transform.rotate(image, angle)
-        image = pygame.transform.flip(image, flipObjectDraw, False) 
+        image = pygame.transform.flip(image, flipObjectDraw, False)
         rect = image.get_rect(center=(car.xPlace + PLAYER_WIDTH / 2, car.yPlace + PLAYER_HEIGHT / 2))
         return image, rect
-            
 
-    def CorrectCameraView(self):
+
+    def correct_camera_view(self):
         self.bg_x = -self.player.player_rect.x + self.width // 2
         self.bg_y = -self.player.player_rect.y + self.height // 2
 
@@ -241,7 +242,7 @@ class Game:
         self.bg_y = 0 if self.bg_y >= 0 else -(FLOOR_BACKGOURND - self.height) if -self.bg_y >= FLOOR_BACKGOURND - self.height else self.bg_y
         
 
-    def DrawPlayerEssntials(self, xOfPlayerOnScreen : int, yOfPlayerOnScreen : int, secondPlayer :physics.Object):
+    def draw_player_essentials(self, xOfPlayerOnScreen : int, yOfPlayerOnScreen : int, secondPlayer :physics.Object):
 
         # draw boost amount
         amountOfBoost = (self.player.PlayerObject.boostAmount / physics.MAX_BOOST) * 100
@@ -260,65 +261,59 @@ class Game:
 
         pygame.draw.circle(self.screen, color, (jumpX, jumpY), radius)
 
-        self.DrawBoost(secondPlayer)
+        self.draw_boost(secondPlayer)
     
+
+    def add_boost_particle(self, object : physics.Object, particles_lst: list):
+        amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
+
+        angle = object.angle if not object.flipObjectDraw else 180 - object.angle
+
+        rectX, rectY = object.xPlace, object.yPlace - randint(0,10) # we will start drawing the blocks from the middle of the object and down
+        rectX = rectX - 40 * math.cos(math.radians(angle)) + 20
+        rectY = rectY + 40 * math.sin(math.radians(angle)) + 20
+
+        particles_lst.append([time.time()])  # the first index of each row will be the time of when the player started it
+        particles_lst[-1].append((rectX, rectY, amountOfBoostBlocks))
+
+
+    def draw_boost_particles(self, particles_lst: list):
+        # now we will draw the boost
+        if len(particles_lst) > 0:
+            for index, boostRow in enumerate(particles_lst):
+                boostTime = time.time() - boostRow[0]
+                if boostTime > 0.5:  # kill the boost row
+                    del particles_lst[index]
+                else:
+                    rectX, rectY = boostRow[1][0], boostRow[1][1]
+                    if -self.bg_x + self.width > rectX > -self.bg_x and -self.bg_y + self.height > rectY > -self.bg_y:  # if on screen
+                        maxTimeR = 255/0.7
+                        maxTimeG = 165/0.7
+
+                        boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
+                        pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
+
     
     # when player is boosting we will print his boost
-    def DrawBoost(self, secondPlayer:physics.Object):
+    def draw_boost(self, secondPlayer : physics.Object):
         # we will add to the list number of rects
         if self.player.PlayerObject.IsBoosting and self.player.PlayerObject.boostAmount:
-            amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
-
-            angle = self.player.PlayerObject.angle if not self.player.PlayerObject.flipObjectDraw else 180 - self.player.PlayerObject.angle
-
-            rectX, rectY = self.player.player_rect.x, self.player.player_rect.y - randint(0,10) # we will start drawing the blocks from the middle of the object and down
-            rectX = rectX - 40 * math.cos(math.radians(angle)) + 20
-            rectY = rectY + 40 * math.sin(math.radians(angle)) + 20
-
-            self.boostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
-            self.boostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
+            self.add_boost_particle(self.player.PlayerObject, self.boostSprites)
         
         if type(secondPlayer) == physics.Object and secondPlayer.IsBoosting and secondPlayer.boostAmount:
-            amountOfBoostBlocks = randint(10, PLAYER_HEIGHT-5)  # min of 10 blocks
-
-            angle = secondPlayer.angle if not secondPlayer.flipObjectDraw else 180 - secondPlayer.angle
-
-            rectX, rectY = secondPlayer.xPlace, secondPlayer.yPlace - randint(0,10) # we will start drawing the blocks from the middle of the object and down
-            rectX = rectX - 40 * math.cos(math.radians(angle)) + 20
-            rectY = rectY + 40 * math.sin(math.radians(angle)) + 20
-
-            self.secondplayerboostSprites.append([time.time()])  # the first index of each row will be the time of when the player started it
-            self.secondplayerboostSprites[-1].append((rectX, rectY, amountOfBoostBlocks))
+            self.add_boost_particle(secondPlayer, self.secondplayerboostSprites)
         
         # now we will draw the boost
-        if len(self.boostSprites) > 0:
-            for index, boostRow in enumerate(self.boostSprites):
-                boostTime = time.time() - boostRow[0]
-                if boostTime > 0.5:  # kill the boost row
-                    del self.boostSprites[index]
-                else:
-                    rectX, rectY = boostRow[1][0], boostRow[1][1]
-                    if -self.bg_x + self.width > rectX > -self.bg_x and -self.bg_y + self.height > rectY > -self.bg_y:  # if on screen
-                        maxTimeR = 255/0.7
-                        maxTimeG = 165/0.7
+        self.draw_boost_particles(self.boostSprites)
 
-                        boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
-                        pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
+        # seoncd player
             
-        if type(secondPlayer) == physics.Object and len(self.secondplayerboostSprites) > 0:
-            for index, boostRow in enumerate(self.secondplayerboostSprites):
-                boostTime = time.time() - boostRow[0]
-                if boostTime > 0.5:  # kill the boost row
-                    del self.secondplayerboostSprites[index]
-                else:
-                    rectX, rectY = boostRow[1][0], boostRow[1][1]
-                    if -self.bg_x + self.width > rectX > -self.bg_x and -self.bg_y + self.height > rectY > -self.bg_y:  # if on screen
-                        maxTimeR = 255/0.7
-                        maxTimeG = 165/0.7
-
-                        boost = pygame.Rect(rectX + self.bg_x, rectY + self.bg_y, BOOST_WIDTH, boostRow[1][2])
-                        pygame.draw.rect(self.screen, (255 - boostTime * maxTimeR,165 - boostTime * maxTimeG,0), boost)
-        
+        if type(secondPlayer) == physics.Object:
+            self.draw_boost_particles(self.secondplayerboostSprites)
+    
+    def object_in_player_view(self, x, y, width, height):
+        return (-self.bg_x + self.width > x > -self.bg_x or -self.bg_x + self.width > x + width > -self.bg_x)\
+              and (-self.bg_y + self.height > y > -self.bg_y or -self.bg_y + self.height > y + height > -self.bg_y)
 
     def DrawBallAndSecondPlayer(self, secondPlayer:physics.Object, ball:physics.Ball):
         
@@ -330,14 +325,12 @@ class Game:
         if ballObject:
             ballX, ballY = ball.xPlace, ball.yPlace
 
-        if secondPlayerObject and (-self.bg_x + self.width > secondPlayerX > -self.bg_x or -self.bg_x + self.width > secondPlayerX + PLAYER_WIDTH > -self.bg_x)\
-              and (-self.bg_y + self.height > secondPlayerY > -self.bg_y or -self.bg_y + self.height > secondPlayerY + PLAYER_HEIGHT > -self.bg_y):  # if on screen
+        if secondPlayerObject and self.object_in_player_view(secondPlayerX, secondPlayerY, PLAYER_WIDTH, PLAYER_HEIGHT):  # if on screen
             secondPlayerImage = self.player.player_image
-            secondPlayerImage, rect = self.ChangePlayerPictureWithAngle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw, secondPlayer)
+            secondPlayerImage, rect = self.change_player_picture_with_angle(secondPlayerImage, secondPlayer.angle, secondPlayer.flipObjectDraw, secondPlayer)
             self.screen.blit(secondPlayerImage, (rect.x + self.bg_x, rect.y + self.bg_y))
         
-        if ballObject and (-self.bg_x + self.width > ballX > -self.bg_x or -self.bg_x + self.width > ballX + BALL_RADIUS > -self.bg_x)\
-              and (-self.bg_y + self.height > ballY > -self.bg_y or -self.bg_y + self.height > ballY + BALL_RADIUS > -self.bg_y):
+        if ballObject and self.object_in_player_view(ballX, ballY, BALL_RADIUS, BALL_RADIUS):
             ballImage = pygame.transform.rotate(self.ballImage, ball.angle)
             rect = ballImage.get_rect(center=(ballX + BALL_RADIUS, ballY + BALL_RADIUS))
             self.screen.blit(ballImage, (rect.x + self.bg_x, rect.y + self.bg_y))
@@ -468,11 +461,7 @@ class Game:
             time.sleep(5)
 
 
-    def GameLoop(self):
-        colorOfTimer = (255,215,0)
-        font = pygame.font.Font(None, 50)
-
-
+    def set_game(self):
         waitingScreen = pygame.image.load('waitingScreen.png').convert()
         waitingScreen = pygame.transform.scale(waitingScreen, (self.width, self.height))
 
@@ -486,10 +475,9 @@ class Game:
 
         if self.gameNetwork.nullObject:
             pygame.mixer.music.stop()
-            del self.gameNetwork
             return
         
-        self.gameNetwork.GetStartingPos()
+        self.gameNetwork.get_starting_pos()
         pygame.mixer.music.stop()
 
         self.PutObjectInPlace(self.gameNetwork.first_player)
@@ -497,17 +485,61 @@ class Game:
         self.screen.blit(self.background_image, (0,0))
         self.WaitFiveSeconds()
 
-        firstPlayerGoals = 0
-        secondPlayerGoals = 0
-
-        running = True
-        endGameTime = time.time() + 120  # two minutes from now
         music = pygame.mixer.music.load('gameMusic.mp3')
         pygame.mixer.music.play(-1)
 
-        th = threading.Thread(target=self.gameNetwork.GameHandling, args=())
+
+    def print_elements_screen(self, second_player : physics.Object, ball : physics.Ball, end_game_time, first_player_goals : int, second_player_goals : int):
+        colorOfTimer = (255,215,0)
+        font = pygame.font.Font(None, 50)
+
+        self.correct_camera_view()  # get the camera right place
+        player_image = self.player.player_image
+        player_image, rect = self.change_player_picture_with_angle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw, self.player.PlayerObject)
+
+        # Draw everything
+        self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
+        self.draw_player_essentials(self.player.PlayerObject.xPlace + self.bg_x, self.player.PlayerObject.yPlace + self.bg_y, second_player)
+
+        self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
+        self.DrawBallAndSecondPlayer(second_player, ball)
+
+        # print block so that player will see the stats
+        statsRect = pygame.Rect(self.width // 2 - 60, 0, 205, 60)
+        pygame.draw.rect(self.screen, (0,0,0), statsRect)
+
+        timeLeft = int(end_game_time - time.time())
+        minutes, seconds = divmod(timeLeft, 60)
+        timeInStr = f'{minutes:02d}:{seconds:02d}'  # format for minutes and seconds
+
+        #print time
+        text_surface, text_rect = self.render_text(timeInStr, font, colorOfTimer)
+        self.screen.blit(text_surface, (self.width //2, 20))
+
+        # print goals
+        text_surface, text_rect = self.render_text(str(first_player_goals), font, (255,255,255))
+        self.screen.blit(text_surface, (self.width //2 - 50, 20))
+
+        text_surface, text_rect = self.render_text(str(second_player_goals), font, (255,255,255))
+        self.screen.blit(text_surface, (self.width //2 + 120, 20))
+
+        return timeLeft
+
+
+    def GameLoop(self):
+        self.set_game()
+
+        if self.gameNetwork.nullObject:
+            del self.gameNetwork
+            return
+
+        firstPlayerGoals = 0
+        secondPlayerGoals = 0
+        end_game_time = time.time() + 120  # two minutes from now
+        th = threading.Thread(target=self.gameNetwork.game_handle, args=())
         th.start()
         while self.gameNetwork.running:
+
             self.player.PlayerObject = self.gameNetwork.player_object if self.gameNetwork.player_object != None and self.gameNetwork.player_object != "" else self.player.PlayerObject
             second_player = self.gameNetwork.second_player_object
             ball = self.gameNetwork.ball_object
@@ -516,35 +548,7 @@ class Game:
             self.gameNetwork.send_player(self.player.PlayerObject)
             self.width, self.height = self.player.width, self.player.height
 
-            self.CorrectCameraView()  # get the camera right place
-            player_image = self.player.player_image
-            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw, self.player.PlayerObject)
-
-            # Draw everything
-            self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
-            self.DrawPlayerEssntials(self.player.PlayerObject.xPlace + self.bg_x, self.player.PlayerObject.yPlace + self.bg_y, second_player)
-
-            self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
-            self.DrawBallAndSecondPlayer(second_player, ball)
-
-            # print block so that player will see the stats
-            statsRect = pygame.Rect(self.width // 2 - 60, 0, 205, 60)
-            pygame.draw.rect(self.screen, (0,0,0), statsRect)
-
-            timeLeft = int(endGameTime - time.time())
-            minutes, seconds = divmod(timeLeft, 60)
-            timeInStr = f'{minutes:02d}:{seconds:02d}'  # format for minutes and seconds
-
-            #print time
-            text_surface, text_rect = self.render_text(timeInStr, font, colorOfTimer)
-            self.screen.blit(text_surface, (self.width //2, 20))
-
-            # print goals
-            text_surface, text_rect = self.render_text(str(firstPlayerGoals), font, (255,255,255))
-            self.screen.blit(text_surface, (self.width //2 - 50, 20))
-
-            text_surface, text_rect = self.render_text(str(secondPlayerGoals), font, (255,255,255))
-            self.screen.blit(text_surface, (self.width //2 + 120, 20))
+            time_left = self.print_elements_screen(second_player, ball, end_game_time, firstPlayerGoals, secondPlayerGoals)
 
             # Update the display
             pygame.display.update()
@@ -566,7 +570,7 @@ class Game:
                     secondPlayerGoals += 1
                 
                 self.player.PlayerObject.xSpeed, self.player.PlayerObject.ySpeed = 0, 0
-                endGameTime += 5  # the player waited five seconds so we add to the end time
+                end_game_time += 5  # the player waited five seconds so we add to the end time
                 self.player.PlayerObject.boostAmount = 100
                 self.gameNetwork.ball_object.inGoal = False
 
@@ -574,25 +578,26 @@ class Game:
                 self.WaitFiveSeconds()
 
             keys=pygame.key.get_pressed()
+            # if player wants to get out in the middle of the game
             if keys[K_ESCAPE]:
                 self.gameNetwork.running = False
-                
             
-            if timeLeft <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
+            if time_left <= 0 or self.gameNetwork.gameEnded or self.gameNetwork.gameEndedEnt:
                 self.gameNetwork.running = False
         
         th.join()
         pygame.mixer.music.stop()
         
-        self.endGame(int(endGameTime - time.time()), firstPlayerGoals, secondPlayerGoals, self.gameNetwork.first_player)
-
-
+        self.endGame(int(end_game_time - time.time()), firstPlayerGoals, secondPlayerGoals, self.gameNetwork.first_player)
 
 
     def FreePlayLoop(self):
         running = True
         music = pygame.mixer.music.load('gameMusic.mp3')
         pygame.mixer.music.play(-1)
+
+        goals = 0
+
         while running: 
             #for player in self.players:
             self.player.PlayerMotion()
@@ -604,16 +609,7 @@ class Game:
 
             self.ball.CalculateBallPlace([self.player.PlayerObject])
 
-            self.CorrectCameraView()  # get the camera right place
-            player_image = self.player.player_image
-            player_image, rect = self.ChangePlayerPictureWithAngle(player_image, self.player.PlayerObject.angle, self.player.PlayerObject.flipObjectDraw, self.player.PlayerObject)
-
-            # Draw everything
-            self.screen.blit(self.background_image, (self.bg_x, self.bg_y))
-            self.DrawPlayerEssntials(self.player.player_rect.x + self.bg_x, self.player.player_rect.y + self.bg_y, None)
-
-            self.screen.blit(player_image, (rect.x + self.bg_x, rect.y + self.bg_y))
-            self.DrawBallAndSecondPlayer(None, self.ball)
+            self.print_elements_screen(None, self.ball, time.time(), goals, 0)
 
             # Update the display
             pygame.display.update()
@@ -629,6 +625,7 @@ class Game:
                 self.ball.xSpeed, self.ball.ySpeed = 0,0
                 self.player.PlayerObject.flipObjectDraw = False
                 self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
+                goals += 1
         
         pygame.mixer.music.stop()
 
