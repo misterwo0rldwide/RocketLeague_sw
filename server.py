@@ -64,7 +64,7 @@ class Match:
         for msg, addr in ls:
 
             # if we got message and not socket timeout
-            if msg != "":
+            if msg != "" and msg != 0:
                 msg_command = msg[:protocol.BUFFER_LENGTH_SIZE - 1].decode()
                 msg_info = msg[protocol.BUFFER_LENGTH_SIZE:]
 
@@ -73,7 +73,7 @@ class Match:
                     
                     if addr == self.playerAddr:
                         self.firstPlayerConnected = True
-                    else:
+                    elif addr == self.player2Addr:
                         self.secondPlayerConnected = True
 
                     msg1, addr1 = RecvMsg(self.server_socket_udp)
@@ -84,8 +84,9 @@ class Match:
                         self.firstPlayerData = msg_info
                     elif addr == self.player2Addr:
                         self.secondPlayerData = msg_info
-
-
+            
+            elif msg == 0:
+                self.running = False
 
 
     def HandleGame(self):
@@ -99,6 +100,9 @@ class Match:
         time.sleep(5)
         while self.running:
             self.recv_game_data()
+            if self.running == False:
+                retMsg = protocol.GAME_STOPPED_ENTHERNET
+                break
 
             first_player = pickle.loads(self.firstPlayerData) if self.firstPlayerData != None else self.firstPlayerData
             second_player = pickle.loads(self.secondPlayerData) if self.secondPlayerData != None else self.secondPlayerData
@@ -197,8 +201,11 @@ def RecvMsg(sock) -> tuple:
             raise Exception("Data corrupted")
 
         return buffer, addr
-    except socket.error as e:
+    except socket.timeout as e:
         return "", ""
+
+    except ConnectionResetError as e:
+        return 0,0
 
 
 # gets a list of clients

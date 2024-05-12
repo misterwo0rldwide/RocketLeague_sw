@@ -42,9 +42,11 @@ width = infoScreen.current_w if infoScreen.current_w < RIGHT_WALL_BACKGROUND els
 height = infoScreen.current_h if infoScreen.current_h < FLOOR_BACKGOURND else FLOOR_BACKGOURND
 SCREEN = pygame.display.set_mode((width, height))
 
+RUN = True
+
 
 class Server:
-    SERVER_IP = '10.100.102.103'
+    SERVER_IP = '127.0.0.1'
 
     def __init__(self):
         self.SERVER_PORT = 1393
@@ -79,6 +81,11 @@ class Server:
 
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
+        msg = self.recv_msg()
+        while len(msg) == 0 or msg.decode()[:-1] != protocol.SERVER_GOT_ADDRESS:
+            self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
+            msg = self.recv_msg()
+        
         self.playerSocket.settimeout(0.1)
 
         self.gameEnded = False
@@ -96,6 +103,7 @@ class Server:
         self.second_player_object = None
         self.ball_object = None
 
+        self.time_out_cnt = 0
         self.running = True
     
 
@@ -115,11 +123,15 @@ class Server:
             if buffer[:protocol.BUFFER_LENGTH_SIZE - 1].decode() == protocol.GAME_STOPPED_ENTHERNET:
                 self.gameEndedEnt = True
 
+            self.time_out_cnt = 0
             return buffer
         except ConnectionResetError as e:
             self.gameEndedEnt = True
             return b""
         except socket.timeout as e:
+            self.time_out_cnt += 1
+            if self.time_out_cnt > 10:
+                self.gameEndedEnt = True
             return b""
         
 
@@ -162,7 +174,9 @@ class Server:
 
     def game_handle(self):
 
-        while not (self.gameEnded or self.gameEndedEnt or not self.running):
+        while not (self.gameEnded or self.gameEndedEnt or not self.running) and RUN:
+            if self.ball_object != None and self.ball_object.inGoal:
+                time.sleep(5)
             if time.time() - self.clientConnected > 5:
                 self.clientConnected = time.time()
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
@@ -223,8 +237,6 @@ class Game:
         self.bg_y = 0
 
         self.ball = physics.Ball(BALL_WEIGHT, BALL_STARTING_POS, BALL_RADIUS)
-
-        self.input_wait = False
     
 
     def change_player_picture_with_angle(self, image, angle, flipObjectDraw, car: physics.Object):
@@ -446,9 +458,9 @@ class Game:
                 lostScreen = pygame.transform.scale(lostScreen, (self.width, self.height))
                 self.screen.blit(lostScreen, (0,0))
             
-            pygame.display.flip()
+        pygame.display.flip()
 
-            time.sleep(5)
+        time.sleep(5)
         
         # if game ended due to internter issues
         if self.gameNetwork.gameEndedEnt:
@@ -684,6 +696,7 @@ class Player():
         self.player_rect.y = 850
 
     def HandleEvents(self):
+        global RUN
 
         self.PlayerTouchedControlrs = False
 
@@ -698,25 +711,15 @@ class Player():
                 self.joystick = pygame.joystick.Joystick(0)
             if event.type == JOYDEVICEREMOVED:
                 self.joystick = 0
-            if event.type == pygame.MOUSEMOTION and not self.PlayerObject.ObjectOnGround:
-                mouse_position = pygame.mouse.get_pos()
-                xDiff = (mouse_position[0] - self.PlayerObject.xPlace) / (self.width / 2)
-                yDiff = (mouse_position[1] - self.PlayerObject.yPlace) / (self.height / 2)
-                self.accelrationX = xDiff
-                self.accelrationY = yDiff
-                self.PlayerTouchedControlrs = True
             
             # if game was resized
             if event.type == pygame.WINDOWRESIZED:
                 self.width, self.height = pygame.display.get_surface().get_size()
             # if game is closed
             if event.type == pygame.QUIT:
+                RUN = False
                 pygame.quit()
                 sys.exit()
-
-        keys = pygame.key.get_pressed()
-        if (keys[pygame.K_LCTRL] or keys[pygame.K_RCTRL]) and self.PlayerObject.boostAmount != 0:
-            self.IsBoosting = True
 
 
         # because the player usually presses the boost and not tapping it will not be as an event so we need to check it manually
