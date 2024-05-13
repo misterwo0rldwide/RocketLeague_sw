@@ -17,6 +17,8 @@ BUFFER_LIMIT = 1024
 BALL_RADIUS = 40
 BALL_WEIGHT = 70
 
+t_id = 0
+
 class Match:
     
     def __init__(self, server_socket_udp:socket):
@@ -29,6 +31,7 @@ class Match:
             msg, addr = RecvMsg(self.server_socket_udp)
 
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
         self.playerAddr = addr
         
         msg, addr = RecvMsg(self.server_socket_udp)
@@ -36,6 +39,7 @@ class Match:
             msg, addr = RecvMsg(self.server_socket_udp)
 
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.SERVER_GOT_ADDRESS, None), addr)
         self.player2Addr = addr
 
         self.ballX, self.ballY = BALL_STARTING_POS[0], BALL_STARTING_POS[1]
@@ -52,8 +56,12 @@ class Match:
 
     def send_game_data(self, addr, secondPlayerData, firstPlayerData, ball):
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.SECOND_PLAYER_INFO, secondPlayerData), addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.SECOND_PLAYER_INFO, secondPlayerData), addr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, firstPlayerData), addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, firstPlayerData), addr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.BALL_INFO, ball), addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.BALL_INFO, ball), addr)
+        
     
     
     def recv_game_data(self):
@@ -145,25 +153,32 @@ class Match:
 
             currentTime = time.time()
             if currentTime - timeLeft > 124:
-                self.running = False
-                
+                self.running = False        
         
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
+        log_output_data(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.player2Addr)
+        log_output_data(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
 
         print(f'game ended - player1-{self.playerAddr}, player2{self.player2Addr}')
         self.server_socket_udp.close()
 
 
-    def Lunching(self):
+    def Lunching(self, thread_id):
+        global t_id
+
         # sending to players that the game is about to start
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.playerAddr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.player2Addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), self.player2Addr)
         
         # sending for the players which player they are
         # '0' - second player, '1' - first player
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, '1'), self.playerAddr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, '1'), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, '0'), self.player2Addr)
+        log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, '0'), self.player2Addr)
 
 
         # now we ensure both sides got data
@@ -174,6 +189,7 @@ class Match:
                 msg1, addr = RecvMsg(self.server_socket_udp)
                 if msg1 != "" and msg1.decode()[:-1] == protocol.MSG_NOT_RECIVED:
                     self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
+                    log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
                 elif msg1 != "" and msg1.decode()[:-1] == protocol.MSG_RECIVED:
                     player1GotData = True
             
@@ -181,6 +197,7 @@ class Match:
                 msg2, addr = RecvMsg(self.server_socket_udp)
                 if msg2 != "" and msg2.decode()[:-1] == protocol.MSG_NOT_RECIVED:
                     self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
+                    log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
                 elif msg2 != "" and msg2.decode()[:-1] == protocol.MSG_RECIVED:
                     player2GotData = True
             
@@ -188,12 +205,18 @@ class Match:
                 break
 
         self.HandleGame()
+        print(f'Thread killed - id: {thread_id}')
+        print(f'Socket killed - {self.server_socket_udp}')
+        self.server_socket_udp.close()
+        t_id -= 1
 
 
 def RecvMsg(sock) -> tuple:
     try:
         buffer,addr = sock.recvfrom(protocol.MAX_MESSAGE_LENGTH)
         size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
+
+        print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer}\n---')
 
         buffer = buffer[protocol.BUFFER_LENGTH_SIZE:]
         
@@ -202,11 +225,16 @@ def RecvMsg(sock) -> tuple:
 
         return buffer, addr
     except socket.timeout as e:
+        print(e)
         return "", ""
-
+    
     except ConnectionResetError as e:
+        print(e)
         return 0,0
 
+
+def log_output_data(msg_info, addr):
+    print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info}\n---")
 
 # gets a list of clients
 # check if each of the client is connected
@@ -221,18 +249,23 @@ def check_client_connected(clients: list[socket.socket]):
         except ConnectionError as e:
             # if got to here it means the socket does not longer exists
             clients.remove(sock)
+            sock.close()
+            print(f'Closed socket - {sock}')
         except socket.timeout as e:
             pass
 
 
 def HandlePlayers(server_socket_tcp : socket):
+    global t_id
+    
     prevClient = ''
     prevAddr = ''
     currentClient = []
-
+    threads = []
 
     while True:
         client, addr = server_socket_tcp.accept()
+        print(f'New client accepted - {addr}')
         
         currentClient.append(client)
         check_client_connected(currentClient)
@@ -242,12 +275,20 @@ def HandlePlayers(server_socket_tcp : socket):
             new_server_socket.bind((IP, 0))
             port = str(new_server_socket.getsockname()[1])
 
+            print(f'New socket: {new_server_socket}')
+
             client.send(protocol.BuildMsgProtocol(protocol.NEW_GAME_PORT, port))
+            log_output_data(protocol.BuildMsgProtocol(protocol.NEW_GAME_PORT, port), client)
             prevClient.send(protocol.BuildMsgProtocol(protocol.NEW_GAME_PORT, port))
+            log_output_data(protocol.BuildMsgProtocol(protocol.NEW_GAME_PORT, port), prevClient)
 
             game = Match(new_server_socket)
-            t = threading.Thread(target=game.Lunching, args=())  # start game
+            t = threading.Thread(target=game.Lunching, args=(t_id,))  # start game
             t.start()
+
+            print(f'New thread - id: {t_id}')
+            threads.append(t)
+            t_id += 1
 
             currentClient.remove(prevClient)
             currentClient.remove(client)
@@ -256,6 +297,9 @@ def HandlePlayers(server_socket_tcp : socket):
 
         prevClient = client
         prevAddr = addr
+
+    for t in threads:
+        t.join()
         
 
 
@@ -265,9 +309,11 @@ def main():
     server_socket_tcp.listen()
 
     print('Server running')
+    print(f'New socket: {server_socket_tcp}')
 
     HandlePlayers(server_socket_tcp)
     
+    print(f'Closing socket: {server_socket_tcp}')
     server_socket_tcp.close()
 
 

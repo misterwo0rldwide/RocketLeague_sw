@@ -53,11 +53,16 @@ class Server:
 
         try:
             self.tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            print(f'New socket: {self.tcpSocket}')
             self.tcpSocket.connect((self.SERVER_IP, self.SERVER_PORT))
+            print(f'Socket connected succusfully: {self.tcpSocket}')
         
         except Exception as e:
             print("server is not running...")
+            print(e)
             self.nullObject = True
+            print(f'Socket connected unsuccusfully: {self.tcpSocket}')
+            print(f'Closing socket: {self.tcpSocket}')
             self.tcpSocket.close()
             return
 
@@ -65,11 +70,13 @@ class Server:
 
         t = threading.Thread(target=self.recv_by_size, args=())
         t.start()
+        print(f'New Thread: {t}')
         while self.buffer == "":
             for event in pygame.event.get():
                 if event.type == KEYDOWN:
                     if event.key == K_ESCAPE:
                         self.nullObject = True
+                        print(f'Closing socket: {self.tcpSocket}')
                         self.tcpSocket.close()
                         return
             
@@ -80,9 +87,12 @@ class Server:
         self.SERVER_PORT = int(self.buffer[protocol.BUFFER_LENGTH_SIZE:])
 
         self.playerSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        print(f'New socket: {self.playerSocket}')
+        self.log_output_data(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
         msg = self.recv_msg()
         while len(msg) == 0 or msg.decode()[:-1] != protocol.SERVER_GOT_ADDRESS:
+            self.log_output_data(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
             self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.JOINING_GAME, None), (self.SERVER_IP, self.SERVER_PORT))
             msg = self.recv_msg()
         
@@ -109,8 +119,10 @@ class Server:
 
     def recv_msg(self):
         try:
-            buffer,_ = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
+            buffer,addr = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
             size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
+
+            print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer}\n---')
 
             buffer = buffer[protocol.BUFFER_LENGTH_SIZE:]
             
@@ -127,11 +139,16 @@ class Server:
             return buffer
         except ConnectionResetError as e:
             self.gameEndedEnt = True
+            print(e)
             return b""
         except socket.timeout as e:
             self.time_out_cnt += 1
             if self.time_out_cnt > 10:
                 self.gameEndedEnt = True
+            print(e)
+            return b""
+        except Exception as e:
+            print(e)
             return b""
         
 
@@ -140,6 +157,8 @@ class Server:
         try:
             dataLength = int(self.tcpSocket.recv(4).decode())
             buffer = self.tcpSocket.recv(dataLength)
+
+            print(f'---\nRECIVED MESSAGE\nAddress: {(self.SERVER_IP, self.SERVER_PORT)}\nContent: {buffer}\n---')
             
             lengthMsg = len(buffer)
             while lengthMsg != dataLength:
@@ -149,8 +168,13 @@ class Server:
             self.buffer = buffer
 
         except Exception as e:
+            print(e)
             self.buffer = 0
+            print(f'Closing socket: {self.tcpSocket}')
             self.tcpSocket.close()
+        
+        finally:
+            print(f'Thread ended')
     
     # we only need one bool to know where to place everyone
     # this bool will indicate if we are the first or the second player
@@ -163,9 +187,14 @@ class Server:
             try:
                 msg = self.recv_msg()[protocol.BUFFER_LENGTH_SIZE:]
                 msg = int(msg)
+                self.log_output_data(protocol.BuildMsgProtocol(protocol.MSG_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
                 break
             except Exception as e:
+                if self.gameEndedEnt:
+                    return
+                print(e)
+                self.log_output_data(protocol.BuildMsgProtocol(protocol.MSG_NOT_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.MSG_NOT_RECIVED, None), (self.SERVER_IP, self.SERVER_PORT))
         
         
@@ -179,6 +208,7 @@ class Server:
                 time.sleep(5)
             if time.time() - self.clientConnected > 5:
                 self.clientConnected = time.time()
+                self.log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
                 self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STILL_CONNECTED, None), (self.SERVER_IP, self.SERVER_PORT))
 
             msg = self.recv_msg()
@@ -199,13 +229,20 @@ class Server:
                 elif msg_command == protocol.BALL_INFO:
                     self.ball_object = pickle.loads(msg_info)
         
+        print('Thread ended')
+        
     
     def send_player(self, player_object : physics.Object):
         player = pickle.dumps(player_object)
+        self.log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player), (self.SERVER_IP, self.SERVER_PORT))
         self.playerSocket.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_INFO, player), (self.SERVER_IP, self.SERVER_PORT))
     
     def close_game(self):
+        print(f'Closing socket {self.playerSocket}')
         self.playerSocket.close()
+    
+    def log_output_data(self, msg_info, addr):
+        print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info}\n---")
 
 
 class Game:
@@ -458,9 +495,9 @@ class Game:
                 lostScreen = pygame.transform.scale(lostScreen, (self.width, self.height))
                 self.screen.blit(lostScreen, (0,0))
             
-        pygame.display.flip()
+            pygame.display.flip()
 
-        time.sleep(5)
+            time.sleep(5)
         
         # if game ended due to internter issues
         if self.gameNetwork.gameEndedEnt:
@@ -485,11 +522,15 @@ class Game:
         pygame.mixer.music.play(loops=-1)
         self.gameNetwork = Server()
 
-        if self.gameNetwork.nullObject:
+        if self.gameNetwork.nullObject or self.gameNetwork.gameEndedEnt:
+            pygame.mixer.music.stop()
+            return
+
+        self.gameNetwork.get_starting_pos()
+        if self.gameNetwork.gameEndedEnt:
             pygame.mixer.music.stop()
             return
         
-        self.gameNetwork.get_starting_pos()
         pygame.mixer.music.stop()
 
         self.PutObjectInPlace(self.gameNetwork.first_player)
@@ -550,6 +591,7 @@ class Game:
         end_game_time = time.time() + 120  # two minutes from now
         th = threading.Thread(target=self.gameNetwork.game_handle, args=())
         th.start()
+        print(f'New thread: {th}')
         while self.gameNetwork.running:
 
             self.player.PlayerObject = self.gameNetwork.player_object if self.gameNetwork.player_object != None and self.gameNetwork.player_object != "" else self.player.PlayerObject
@@ -600,6 +642,7 @@ class Game:
         th.join()
         pygame.mixer.music.stop()
         
+        self.gameNetwork.close_game()
         self.endGame(int(end_game_time - time.time()), firstPlayerGoals, secondPlayerGoals, self.gameNetwork.first_player)
 
 
