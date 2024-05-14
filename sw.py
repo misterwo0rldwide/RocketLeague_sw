@@ -258,7 +258,7 @@ class Game:
         self.width = self.player.width
         self.height = self.player.height
 
-        self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
+        self.screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
         pygame.display.set_caption("Rocket League")
 
         # Load the background image
@@ -586,6 +586,7 @@ class Game:
             del self.gameNetwork
             return
 
+        self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         firstPlayerGoals = 0
         secondPlayerGoals = 0
         end_game_time = time.time() + 120  # two minutes from now
@@ -647,6 +648,7 @@ class Game:
 
 
     def FreePlayLoop(self):
+        self.screen = pygame.display.set_mode((self.width, self.height), RESIZABLE)
         running = True
         music = pygame.mixer.music.load('gameMusic.mp3')
         pygame.mixer.music.play(-1)
@@ -697,6 +699,7 @@ class Game:
             else:
                 self.FreePlayLoop()
             
+            self.screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)            
             width, height = SCREEN.get_size()
             self.player = Player(width, height)
             self.ball.xPlace, self.ball.yPlace = BALL_STARTING_POS
@@ -818,12 +821,19 @@ class Player():
         self.accelrationX,self.accelrationY, self.PlayerObject.IsJumping, self.IsBoosting = 0,1,False, False
         
 
-width, height = SCREEN.get_size()
-player = Player(width, height)
-game = Game(player)
-game.MainLoop()
+
+def main():
+    width, height = SCREEN.get_size()
+    player = Player(width, height)
+    game = Game(player)
+    game.MainLoop()
 
 
 
-pygame.quit()
-sys.exit()
+    pygame.quit()
+    sys.exit()
+
+
+
+if __name__ == '__main__':
+    main()

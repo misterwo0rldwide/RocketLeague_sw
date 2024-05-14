@@ -158,7 +158,7 @@ class Match:
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
         log_output_data(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
         self.server_socket_udp.sendto(protocol.BuildMsgProtocol(retMsg, None), self.player2Addr)
-        log_output_data(protocol.BuildMsgProtocol(retMsg, None), self.playerAddr)
+        log_output_data(protocol.BuildMsgProtocol(retMsg, None), self.player2Addr)
 
         print(f'game ended - player1-{self.playerAddr}, player2{self.player2Addr}')
         self.server_socket_udp.close()
