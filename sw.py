@@ -43,10 +43,11 @@ height = infoScreen.current_h if infoScreen.current_h < FLOOR_BACKGOURND else FL
 SCREEN = pygame.display.set_mode((width, height))
 
 RUN = True
+DEBUG = False
 
 
 class Server:
-    SERVER_IP = '127.0.0.1'
+    SERVER_IP = '10.100.102.103'
 
     def __init__(self):
         self.SERVER_PORT = 1393
@@ -122,7 +123,8 @@ class Server:
             buffer,addr = self.playerSocket.recvfrom(protocol.MAX_MESSAGE_LENGTH)
             size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
 
-            print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer}\n---')
+            if DEBUG:
+                print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer[:protocol.MAX_PROTOCOL_LOG_LENGTH]}...\n---')
 
             buffer = buffer[protocol.BUFFER_LENGTH_SIZE:]
             
@@ -158,7 +160,8 @@ class Server:
             dataLength = int(self.tcpSocket.recv(4).decode())
             buffer = self.tcpSocket.recv(dataLength)
 
-            print(f'---\nRECIVED MESSAGE\nAddress: {(self.SERVER_IP, self.SERVER_PORT)}\nContent: {buffer}\n---')
+            if DEBUG:
+                print(f'---\nRECIVED MESSAGE\nAddress: {(self.SERVER_IP, self.SERVER_PORT)}\nContent: {buffer[:protocol.MAX_PROTOCOL_LOG_LENGTH]}...\n---')
             
             lengthMsg = len(buffer)
             while lengthMsg != dataLength:
@@ -242,7 +245,8 @@ class Server:
         self.playerSocket.close()
     
     def log_output_data(self, msg_info, addr):
-        print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info}\n---")
+        if DEBUG:
+            print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info[:protocol.MAX_PROTOCOL_LOG_LENGTH]}...\n---")
 
 
 class Game:

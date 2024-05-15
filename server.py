@@ -16,6 +16,7 @@ BUFFER_LIMIT = 1024
 
 BALL_RADIUS = 40
 BALL_WEIGHT = 70
+DEBUG = False
 
 t_id = 0
 
@@ -97,6 +98,23 @@ class Match:
                 self.running = False
 
 
+    def player_connected(self):
+        if self.firstPlayerConnected:
+            self.firstPlayerTimeConnected = time.time()
+        else:
+            if time.time() - self.firstPlayerTimeConnected > 6:  # if one of the players is not connected
+                self.running = False
+                return protocol.GAME_STOPPED_ENTHERNET
+        
+        if self.secondPlayerConnected:
+            self.secondPlayerTimeConnected = time.time()
+        else:
+            if time.time() - self.secondPlayerTimeConnected > 6:
+                self.running = False
+                return protocol.GAME_STOPPED_ENTHERNET
+        
+        return ""
+
     def HandleGame(self):
 
         # each game is atleast two minutes
@@ -134,19 +152,8 @@ class Match:
                 self.recv_game_data()
                 time.sleep(5)
             
-            if self.firstPlayerConnected:
-                self.firstPlayerTimeConnected = time.time()
-            else:
-                if time.time() - self.firstPlayerTimeConnected > 6:  # if one of the players is not connected
-                    self.running = False
-                    retMsg = protocol.GAME_STOPPED_ENTHERNET
-            
-            if self.secondPlayerConnected:
-                self.secondPlayerTimeConnected = time.time()
-            else:
-                if time.time() - self.secondPlayerTimeConnected > 6:
-                    self.running = False
-                    retMsg = protocol.GAME_STOPPED_ENTHERNET
+            msg = self.player_connected()
+            retMsg = msg if msg != "" else retMsg
             
             self.firstPlayerConnected = False
             self.secondPlayerConnected = False
@@ -185,21 +192,17 @@ class Match:
         player1GotData = False
         player2GotData = False
         while True:
-            if not player1GotData:
-                msg1, addr = RecvMsg(self.server_socket_udp)
-                if msg1 != "" and msg1.decode()[:-1] == protocol.MSG_NOT_RECIVED:
-                    self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                    log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                elif msg1 != "" and msg1.decode()[:-1] == protocol.MSG_RECIVED:
-                    player1GotData = True
-            
-            if not player2GotData:
-                msg2, addr = RecvMsg(self.server_socket_udp)
-                if msg2 != "" and msg2.decode()[:-1] == protocol.MSG_NOT_RECIVED:
-                    self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                    log_output_data(protocol.BuildMsgProtocol(protocol.STARTING_GAME, None), addr)
-                elif msg2 != "" and msg2.decode()[:-1] == protocol.MSG_RECIVED:
-                    player2GotData = True
+            if not player1GotData or (not player2GotData):
+                msg, addr = RecvMsg(self.server_socket_udp)
+                if msg != "" and msg.decode()[:-1] == protocol.MSG_NOT_RECIVED:
+                    msg = '1' if addr == self.playerAddr else '0'
+                    self.server_socket_udp.sendto(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, msg), addr)
+                    log_output_data(protocol.BuildMsgProtocol(protocol.PLAYER_STARTING_POS, msg), addr)
+                elif msg != "" and msg.decode()[:-1] == protocol.MSG_RECIVED:
+                    if addr == self.playerAddr:
+                        player1GotData = True
+                    elif addr == self.player2Addr:
+                        player2GotData = True
             
             if player1GotData and player2GotData:
                 break
@@ -216,7 +219,8 @@ def RecvMsg(sock) -> tuple:
         buffer,addr = sock.recvfrom(protocol.MAX_MESSAGE_LENGTH)
         size = int(buffer[:protocol.BUFFER_LENGTH_SIZE].decode())  # get size
 
-        print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer}\n---')
+        if DEBUG:
+            print(f'---\nRECIVED MESSAGE\nAddress: {addr}\nContent: {buffer[:protocol.MAX_PROTOCOL_LOG_LENGTH]}...\n---')
 
         buffer = buffer[protocol.BUFFER_LENGTH_SIZE:]
         
@@ -232,9 +236,14 @@ def RecvMsg(sock) -> tuple:
         print(e)
         return 0,0
 
+    except Exception as e:
+        print(e)
+        return "", ""
+
 
 def log_output_data(msg_info, addr):
-    print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info}\n---")
+    if DEBUG:
+        print(f"---SENDING MESSAGE\nAddress: {addr}\nContent: {msg_info[:protocol.MAX_PROTOCOL_LOG_LENGTH]}\n---")
 
 # gets a list of clients
 # check if each of the client is connected
@@ -304,17 +313,22 @@ def HandlePlayers(server_socket_tcp : socket):
 
 
 def main():
-    server_socket_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket_tcp.bind((IP, PORT))
-    server_socket_tcp.listen()
+    try:
+        server_socket_tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket_tcp.bind((IP, PORT))
+        server_socket_tcp.listen()
 
-    print('Server running')
-    print(f'New socket: {server_socket_tcp}')
+        print('Server running')
+        print(f'New socket: {server_socket_tcp}')
 
-    HandlePlayers(server_socket_tcp)
+        HandlePlayers(server_socket_tcp)
+        
+        print(f'Closing socket: {server_socket_tcp}')
+        server_socket_tcp.close()
     
-    print(f'Closing socket: {server_socket_tcp}')
-    server_socket_tcp.close()
+    except Exception as e:
+        print('Address already taken by another program')
+        print(e)
 
 
 
